@@ -35,14 +35,17 @@
 
 ## 功能概览
 
-| 能力 | 当前实现 |
-| :--- | :--- |
-| **数据** | SSQ / DLT 来源同步、CSV 导入导出、原始快照、重复校验与冲突复核 |
-| **观察** | 号码频率、遗漏、和值、跨度、奇偶、分区、连号、重号与共现 |
-| **检验** | 无放回零模型、Monte Carlo 检验、序列相关与多重比较校正 |
-| **模型** | 均匀随机、历史频率、逻辑回归、梯度提升树，共用时间回测协议 |
-| **实验** | 保存参数、种子、冻结数据、逐期结果和代码指纹，支持回测 JSON 导出 |
-| **覆盖** | Monte Carlo 分布对照、合法组合生成、贪心覆盖与覆盖率估计 |
+<table>
+  <thead><tr><th width="104">能力</th><th>当前实现</th></tr></thead>
+  <tbody>
+    <tr><td><strong>数据整理</strong></td><td>SSQ / DLT 来源同步、CSV 导入导出、原始快照、重复校验与冲突复核</td></tr>
+    <tr><td><strong>历史观察</strong></td><td>号码频率、遗漏、和值、跨度、奇偶、分区、连号、重号与共现</td></tr>
+    <tr><td><strong>统计检验</strong></td><td>无放回零模型、Monte Carlo 检验、序列相关与多重比较校正</td></tr>
+    <tr><td><strong>模型比较</strong></td><td>均匀随机、历史频率、逻辑回归、梯度提升树，共用时间回测协议</td></tr>
+    <tr><td><strong>实验留存</strong></td><td>保存参数、种子、冻结数据、逐期结果和代码指纹，支持回测 JSON 导出</td></tr>
+    <tr><td><strong>模拟覆盖</strong></td><td>Monte Carlo 分布对照、合法组合生成、贪心覆盖与覆盖率估计</td></tr>
+  </tbody>
+</table>
 
 界面提供深色主题和移动端布局。真实数据与演示数据分开显示，数据来源、计算状态和实验限制随结果保留。
 
@@ -77,14 +80,17 @@ docker compose up -d --build --wait
 
 ## 文档导航
 
-| 文档 | 内容 |
-| :--- | :--- |
-| [安装](docs/getting-started.md) | 本地与 Docker 的安装、启动和首次导入 |
-| [使用](docs/user-guide.md) | 权限、数据同步、CSV 格式与实验流程 |
-| [部署](docs/deployment.md) | Vercel + Neon、自托管、备份和更新 |
-| [方法](docs/methodology.md) | 零模型、时间切分、评价指标与边界 |
-| [贡献](CONTRIBUTING.md) | 源码结构、开发环境与验证 |
-| [更新](CHANGELOG.md) | 已发布版本的功能变化 |
+<table>
+  <thead><tr><th width="104">文档</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr><td><a href="docs/getting-started.md">安装启动</a></td><td>本地与 Docker 的安装、启动和首次导入</td></tr>
+    <tr><td><a href="docs/user-guide.md">使用指南</a></td><td>权限、数据同步、CSV 格式与实验流程</td></tr>
+    <tr><td><a href="docs/deployment.md">部署指南</a></td><td>Vercel + Neon、自托管、备份和更新</td></tr>
+    <tr><td><a href="docs/methodology.md">研究方法</a></td><td>零模型、时间切分、评价指标与边界</td></tr>
+    <tr><td><a href="CONTRIBUTING.md">贡献指南</a></td><td>源码结构、开发环境与验证</td></tr>
+    <tr><td><a href="CHANGELOG.md">变更记录</a></td><td>已发布版本的功能变化</td></tr>
+  </tbody>
+</table>
 
 ## 使用边界
 
