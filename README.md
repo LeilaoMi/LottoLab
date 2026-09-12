@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/LeilaoMi/lottery-design/actions/workflows/ci.yml"><img src="https://github.com/LeilaoMi/lottery-design/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/LeilaoMi/lottery-design/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/LeilaoMi/lottery-design/ci.yml?branch=main&amp;label=CI" alt="CI"></a>
   <a href="https://github.com/LeilaoMi/lottery-design/releases"><img src="https://img.shields.io/github/v/release/LeilaoMi/lottery-design?color=286ca3&amp;label=release" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-627b94" alt="MIT License"></a>
 </p>
@@ -37,12 +37,12 @@
 
 | 能力 | 当前实现 |
 | :--- | :--- |
-| **数据整理** | SSQ / DLT 公开来源同步、CSV 导入导出、原始快照、重复校验、异常隔离与冲突复核 |
-| **历史观察** | 号码频率、遗漏、和值、跨度、奇偶、分区、连号、重号与共现统计 |
-| **随机性检验** | 基于无放回零模型的 Monte Carlo 检验、序列相关分析与多重比较校正 |
-| **模型比较** | 均匀随机、历史频率、逻辑回归、梯度提升树，共用时间回测协议 |
-| **实验留存** | 保存参数、随机种子、冻结数据、逐期结果、模型比较与代码指纹，支持回测 JSON 导出 |
-| **模拟与覆盖** | Monte Carlo 分布对照、合法组合生成、贪心覆盖，以及明确分母的覆盖率估计 |
+| **数据** | SSQ / DLT 来源同步、CSV 导入导出、原始快照、重复校验与冲突复核 |
+| **观察** | 号码频率、遗漏、和值、跨度、奇偶、分区、连号、重号与共现 |
+| **检验** | 无放回零模型、Monte Carlo 检验、序列相关与多重比较校正 |
+| **模型** | 均匀随机、历史频率、逻辑回归、梯度提升树，共用时间回测协议 |
+| **实验** | 保存参数、种子、冻结数据、逐期结果和代码指纹，支持回测 JSON 导出 |
+| **覆盖** | Monte Carlo 分布对照、合法组合生成、贪心覆盖与覆盖率估计 |
 
 界面提供深色主题和移动端布局。真实数据与演示数据分开显示，数据来源、计算状态和实验限制随结果保留。
 
@@ -65,13 +65,13 @@ docker compose up -d --build --wait
 
 ## 运行与部署
 
-| 方式 | 数据存储 | 计算方式 | 适用场景 |
-| :--- | :--- | :--- | :--- |
-| 本地启动 | SQLite，也可连接本地 PostgreSQL | 独立 worker | 个人分析、开发与较长实验 |
-| Docker Compose | PostgreSQL 17 + 持久卷 | 独立 worker | 完整环境、自托管 |
-| Vercel + Neon | 外部 PostgreSQL，快照压缩入库 | 每请求限时计算 | 个人云端使用，电脑关机后仍可访问 |
+| 方式 | 默认数据库 | 适用场景 |
+| :--- | :--- | :--- |
+| 本地 | SQLite | 个人分析与开发 |
+| Docker | PostgreSQL 17 | 自托管与较长实验 |
+| Vercel | Neon PostgreSQL | 个人云端使用 |
 
-云端默认每次最多运行 **1 项实验、240 秒**。Vercel Hobby 与 Neon Free 可用于符合其条款及配额的个人部署；具体额度以服务商为准。Cloudflare 可选用于自有域名的 DNS。
+本地与 Docker 使用独立 worker；云端按请求计算，电脑关机后仍可访问，默认每次最多运行 **1 项实验、240 秒**。Vercel Hobby 与 Neon Free 可用于符合其条款及配额的个人部署；具体额度以服务商为准。Cloudflare 可选用于自有域名的 DNS。
 
 部署配置、独立预览环境、备份与恢复见 **[部署指南](docs/deployment.md)**。
 
@@ -79,12 +79,12 @@ docker compose up -d --build --wait
 
 | 文档 | 内容 |
 | :--- | :--- |
-| [安装与启动](docs/getting-started.md) | Windows、Linux / macOS、Docker、首次导入与常见启动问题 |
-| [使用指南](docs/user-guide.md) | 权限、数据同步、CSV 格式、统计分析与实验流程 |
-| [部署指南](docs/deployment.md) | Vercel + Neon、自托管、配置、备份和更新 |
-| [研究方法](docs/methodology.md) | 零模型、概率含义、时间切分、评价指标与已知边界 |
-| [贡献指南](CONTRIBUTING.md) | 源码结构、开发环境、验证命令与贡献要求 |
-| [变更记录](CHANGELOG.md) | 已发布版本的功能变化 |
+| [安装](docs/getting-started.md) | 本地与 Docker 的安装、启动和首次导入 |
+| [使用](docs/user-guide.md) | 权限、数据同步、CSV 格式与实验流程 |
+| [部署](docs/deployment.md) | Vercel + Neon、自托管、备份和更新 |
+| [方法](docs/methodology.md) | 零模型、时间切分、评价指标与边界 |
+| [贡献](CONTRIBUTING.md) | 源码结构、开发环境与验证 |
+| [更新](CHANGELOG.md) | 已发布版本的功能变化 |
 
 ## 使用边界
 
