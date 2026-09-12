@@ -17,7 +17,7 @@ def main():
     parser.add_argument("--apply", action="store_true", help="Write only after all preflight checks pass")
     args = parser.parse_args()
     if not args.target_env.is_file():
-        parser.error("缺少私有云配置文件 .env.cloud.local，请参考 docs/CLOUD_DEPLOYMENT.md")
+        parser.error("缺少私有云配置文件 .env.cloud.local，请参考 docs/deployment.md")
     target_values = dotenv_values(args.target_env)
     source_settings = get_settings()
     source = target = None

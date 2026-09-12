@@ -16,6 +16,7 @@ htmlcov
 **/*.zip
 **/*.egg-info
 docs
+*.md
 tests
 docker
 .github

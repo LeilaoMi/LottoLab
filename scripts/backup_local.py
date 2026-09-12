@@ -17,7 +17,7 @@ os.chdir(root)
 settings = get_settings()
 url = make_url(settings.database_url)
 if url.get_backend_name() != "sqlite" or not url.database or url.database == ":memory:":
-    raise SystemExit("This command backs up SQLite. See docs/OPERATIONS.md for PostgreSQL backups.")
+    raise SystemExit("This command backs up SQLite. See docs/deployment.md for PostgreSQL backups.")
 database = Path(url.database).resolve()
 if not database.is_file():
     raise SystemExit("The local database does not exist; no backup created.")

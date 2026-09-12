@@ -10,5 +10,5 @@
 *.docx binary
 *.pdf binary
 *.cmd text eol=crlf
-# Preserve extracted reference material byte-for-byte, including original whitespace.
-docs/extracted/** -text -whitespace
+*.svg text eol=lf
+*.webp binary

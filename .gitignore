@@ -1,5 +1,16 @@
-# Reproducible expanded originals; authoritative archive remains tracked.
+# Local reference material and agent workspace notes.
 docs/source/
+docs/extracted/
+docs/validation/
+AGENTS.md
+PROJECT_AUDIT.md
+PROJECT_SPEC.md
+PLAN.md
+TASKS.md
+FINAL_AUDIT.md
+SCIENTIFIC_AUDIT.md
+RELEASE.md
+预测项目.zip
 
 # Runtime artifacts and credentials.
 .env
