@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import math
+import random
 from typing import Any
 
 PRIMES = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79}
@@ -82,3 +83,69 @@ def structure(kind: str, nums: list[Any]) -> dict[str, Any]:
         "ac": ac_value(n),
         "prime": sum(1 for x in n if x in PRIMES),
     }
+
+
+# ---------- 把 ssq 的预测逻辑推广到全部 8 彩种：频率打分 + 可注入 seed 的 recommend ----------
+# pool: main=(pick, hi), aux=(pick, hi), field=(主区字段, 辅区字段)；digit: 位置数 + 末位上限
+PICK: dict[str, dict[str, Any]] = {
+    "ssq": {"main": (6, 33), "aux": (1, 16), "field": ("red", "blue")},
+    "dlt": {"main": (5, 35), "aux": (2, 12), "field": ("front", "back")},
+    "qlc": {"main": (7, 30), "aux": (0, 0), "field": ("main", None)},
+    "kl8": {"main": (10, 80), "aux": (0, 0), "field": ("nums", None)},  # 推荐给 10 个
+    "fc3d": {"digit": 3, "field": ("digits", None)},
+    "pl3": {"digit": 3, "field": ("digits", None)},
+    "pl5": {"digit": 5, "field": ("digits", None)},
+    "qxc": {"digit": 7, "last_hi": 14, "field": ("digits", None)},
+}
+
+
+def _rank_tokens(tokens: list[str], scores: dict[str, int], k: int, rng: random.Random) -> list[str]:
+    """按频率(拉普拉斯+1)降序、seeded 抖动破平局，取 k 个。"""
+    ranked = sorted((-(scores.get(t, 0) + 1), rng.random(), t) for t in tokens)
+    return [r[2] for r in ranked[:k]]
+
+
+def _freq_by_field(draws: list[dict[str, Any]], field: str) -> dict[str, int]:
+    scores: dict[str, int] = {}
+    for d in draws:
+        val = d.get(field)
+        if val is None:
+            continue
+        vals = val if isinstance(val, (list, tuple)) else [val]
+        for x in vals:
+            tk = f"{int(x):02d}"
+            scores[tk] = scores.get(tk, 0) + 1
+    return scores
+
+
+def recommend(kind: str, draws: list[dict[str, Any]], seed: int = 1) -> dict[str, Any]:
+    """8 彩种统一推荐：池型按各区频率选号；数字型按每位频率逐位选号。同 seed 结果确定。"""
+    spec = PICK.get(kind)
+    if not spec:
+        raise ValueError(f"未知彩种 {kind}")
+    rng = random.Random(seed)
+    if "digit" in spec:
+        pos = int(spec["digit"])
+        last_hi = int(spec.get("last_hi", 9))
+        field = spec["field"][0]
+        main: list[str] = []
+        for p in range(pos):
+            hi = last_hi if (kind == "qxc" and p == pos - 1) else 9
+            scores: dict[str, int] = {}
+            for d in draws:
+                dg = d.get(field) or []
+                if p < len(dg):
+                    tk = str(int(dg[p]))
+                    scores[tk] = scores.get(tk, 0) + 1
+            main.append(_rank_tokens([str(v) for v in range(0, hi + 1)], scores, 1, rng)[0])
+        return {"kind": kind, "main": main, "aux": []}
+    mfield, afield = spec["field"]
+    m_pick, m_hi = spec["main"]
+    a_pick, a_hi = spec["aux"]
+    main = _rank_tokens([f"{v:02d}" for v in range(1, m_hi + 1)], _freq_by_field(draws, mfield), m_pick, rng)
+    aux: list[str] = []
+    if afield and a_pick:
+        aux = _rank_tokens(
+            [f"{v:02d}" for v in range(1, a_hi + 1)], _freq_by_field(draws, afield), a_pick, rng
+        )
+    return {"kind": kind, "main": sorted(main), "aux": sorted(aux)}
