@@ -42,15 +42,25 @@ def number_constraint() -> str:
     clauses = []
     for rule in RULES.values():
         terms = [f"lottery = '{rule.code}'"]
-        for field, count, maximum in (
-            ("main_numbers", rule.main_count, rule.main_max),
-            ("special_numbers", rule.special_count, rule.special_max),
-        ):
-            terms.append(f"coalesce(json_array_length({field}), -1) = {count}")
-            for i in range(count):
-                terms.append(f"CAST({field} ->> {i} AS INTEGER) BETWEEN 1 AND {maximum}")
-                if i:
-                    terms.append(f"CAST({field} ->> {i - 1} AS INTEGER) < CAST({field} ->> {i} AS INTEGER)")
+        if rule.family == "POOL":
+            for field, count, maximum in (
+                ("main_numbers", rule.main_count, rule.main_max),
+                ("special_numbers", rule.special_count, rule.special_max),
+            ):
+                terms.append(f"coalesce(json_array_length({field}), -1) = {count}")
+                for i in range(count):
+                    terms.append(f"CAST({field} ->> {i} AS INTEGER) BETWEEN 1 AND {maximum}")
+                    if i:
+                        terms.append(
+                            f"CAST({field} ->> {i - 1} AS INTEGER) < CAST({field} ->> {i} AS INTEGER)"
+                        )
+        else:  # DIGIT：逐位、有序、可重、含 0；无附加区
+            n = rule.main_count
+            terms.append("coalesce(json_array_length(special_numbers), -1) = 0")
+            terms.append(f"coalesce(json_array_length(main_numbers), -1) = {n}")
+            for i in range(n):
+                cap = rule.last_max if (rule.last_max is not None and i == n - 1) else rule.main_max
+                terms.append(f"CAST(main_numbers ->> {i} AS INTEGER) BETWEEN 0 AND {cap}")
         clauses.append("(" + " AND ".join(terms) + ")")
     return " OR ".join(clauses)
 
