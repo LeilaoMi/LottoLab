@@ -3,22 +3,29 @@ contract.py —— 方案B 数据契约的可执行实现（仅标准库，离�
 严格对齐 P0/contract.md：POOL/DIGIT 两类记录 + 期号归一 + 号码范围校验。
 任何不合规记录抛 ContractError（供采集器在落库前拒绝，而非静默改数据）。
 """
+
 from __future__ import annotations
-from dataclasses import dataclass
 
 # family, main=(count, lo, hi), special=(count, lo, hi), issue_digits
 # qlc 特别号须与基本号不重复，单独在 validate 里处理；kl8 主区固定 20/80。
 RULES: dict[str, dict] = {
-    "ssq": {"family": "POOL",  "main": (6, 1, 33), "special": (1, 1, 16), "issue": 7},
-    "dlt": {"family": "POOL",  "main": (5, 1, 35), "special": (2, 1, 12), "issue": 7},
-    "qlc": {"family": "POOL",  "main": (7, 1, 30), "special": (1, 1, 30), "issue": 7, "no_dup_with_main": True},
-    "kl8": {"family": "POOL",  "main": (20, 1, 80), "special": (0, 0, 0),  "issue": 7},
+    "ssq": {"family": "POOL", "main": (6, 1, 33), "special": (1, 1, 16), "issue": 7},
+    "dlt": {"family": "POOL", "main": (5, 1, 35), "special": (2, 1, 12), "issue": 7},
+    "qlc": {
+        "family": "POOL",
+        "main": (7, 1, 30),
+        "special": (1, 1, 30),
+        "issue": 7,
+        "no_dup_with_main": True,
+    },
+    "kl8": {"family": "POOL", "main": (20, 1, 80), "special": (0, 0, 0), "issue": 7},
     "fc3d": {"family": "DIGIT", "main": (3, 0, 9), "special": (0, 0, 0), "issue": 7},
-    "pl3":  {"family": "DIGIT", "main": (3, 0, 9), "special": (0, 0, 0), "issue": 7},
-    "pl5":  {"family": "DIGIT", "main": (5, 0, 9), "special": (0, 0, 0), "issue": 7},
+    "pl3": {"family": "DIGIT", "main": (3, 0, 9), "special": (0, 0, 0), "issue": 7},
+    "pl5": {"family": "DIGIT", "main": (5, 0, 9), "special": (0, 0, 0), "issue": 7},
     # 七星彩：期号 5 位（契约唯一例外）；7 位数字，末位号池 0..14
-    "qxc":  {"family": "DIGIT", "main": (7, 0, 9), "special": (0, 0, 0), "issue": 5, "last_hi": 14},
+    "qxc": {"family": "DIGIT", "main": (7, 0, 9), "special": (0, 0, 0), "issue": 5, "last_hi": 14},
 }
+
 
 class ContractError(ValueError):
     pass
@@ -72,7 +79,7 @@ def canonicalize(kind: str, issue, main: list, special: list, draw_date: str = "
         for i, v in enumerate(main):
             cap = hi if (i == mcnt - 1 and "last_hi" in r) else mhi
             if v < mlo or v > cap:
-                raise ContractError(f"{kind} 第{i+1}位须∈[{mlo},{cap}]：{v}")
+                raise ContractError(f"{kind} 第{i + 1}位须∈[{mlo},{cap}]：{v}")
         main_out = main  # 保持顺序
 
     if len(special) != scnt:
@@ -90,8 +97,14 @@ def canonicalize(kind: str, issue, main: list, special: list, draw_date: str = "
     if kind in ("ssq", "dlt") and r["family"] == "POOL":
         _check_year_seq(iss, draw_date)
 
-    return {"kind": kind, "issue": iss, "family": r["family"],
-            "main": main_out, "special": special_out, "draw_date": (draw_date or "")[:10]}
+    return {
+        "kind": kind,
+        "issue": iss,
+        "family": r["family"],
+        "main": main_out,
+        "special": special_out,
+        "draw_date": (draw_date or "")[:10],
+    }
 
 
 def key(rec: dict):

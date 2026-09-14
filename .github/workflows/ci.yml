@@ -37,8 +37,8 @@ jobs:
           cache-dependency-path: requirements.lock
       - run: pip install -r requirements.lock && pip install --no-deps -e .
       - run: pip check
-      - run: ruff check backend tests scripts migrations app.py
-      - run: ruff format --check backend tests scripts migrations app.py
+      - run: ruff check backend tests collector scripts migrations app.py
+      - run: ruff format --check backend tests collector scripts migrations app.py
       - run: mypy backend
       - run: pytest -q --junitxml=.local/pytest-ci.xml
       - run: python scripts/check_postgres.py
