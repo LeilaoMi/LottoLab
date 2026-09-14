@@ -24,9 +24,7 @@ export function OnlinePage() {
         </div>
       </header>
 
-      {datasetKind !== 'real' && (
-        <div className="notice">在线工具读取真实开奖，请切到“真实数据”。</div>
-      )}
+      {datasetKind !== 'real' && <div className="notice">在线工具读取真实开奖，请切到“真实数据”。</div>}
 
       <article className="card">
         <div className="card-head">
@@ -61,9 +59,7 @@ export function OnlinePage() {
           </div>
         )}
 
-        {!rec.loading && !data && !rec.error && (
-          <p>该彩种暂无可用开奖数据（小彩种待接入统一库）。</p>
-        )}
+        {!rec.loading && !data && !rec.error && <p>该彩种暂无可用开奖数据（小彩种待接入统一库）。</p>}
       </article>
     </section>
   )
