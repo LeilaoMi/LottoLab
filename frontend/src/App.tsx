@@ -10,6 +10,7 @@ import {
   Moon,
   RefreshCw,
   ShieldCheck,
+  Sparkles,
   Sun,
   Upload,
   X,
@@ -25,9 +26,11 @@ import { Draws } from './pages/Draws'
 import { StatisticsPage } from './pages/Statistics'
 import { ModelsPage, BacktestPage } from './pages/Backtest'
 import { SimulationPage, CoverPage, MethodologyPage } from './pages/Experiments'
+import { OnlinePage } from './pages/Online'
 
 const navigation = [
   ['overview', '开奖观察', LayoutDashboard],
+  ['online', '在线工具', Sparkles],
   ['draws', '开奖数据', Database],
   ['statistics', '统计检验', BarChart3],
   ['models', '模型档案', Grid3X3],
@@ -105,6 +108,7 @@ export function App() {
   }
   const pages: Record<string, React.ComponentType> = {
     overview: Dashboard,
+    online: OnlinePage,
     draws: Draws,
     statistics: StatisticsPage,
     models: ModelsPage,
