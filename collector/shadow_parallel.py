@@ -38,6 +38,11 @@ SOURCES = {
             lambda t: P.parse_500(t, "dlt"),
         ),
         ("17500", "http://data.17500.cn/dlt_asc.txt", lambda t: P.parse_17500(t, "dlt", 5, 2)),
+        (
+            "sporttery",
+            "https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry?gameNo=85&provinceId=0&pageSize=8&isVerify=1&pageNo=1",
+            lambda t: P.parse_sporttery(t, "dlt"),
+        ),
     ],  # 前5+后2、5位期号→真第二独立源
     # 以下 6 彩种：17500 官方镜像采集（vs 生产库的逐期比对仍只 ssq/dlt；这里监控“采集健康”）
     "fc3d": [("17500", "http://data.17500.cn/3d_asc.txt", lambda t: P.parse_17500(t, "fc3d", 3, 0))],
@@ -51,14 +56,16 @@ SOURCES = {
 }
 
 
-def get(url):
+REFERERS = {"sporttery": "https://static.sporttery.cn/"}  # 体彩官方 webapi 需带站内 Referer 才出 JSON
+
+
+def get(url, referer=None):
+    cmd = ["curl", "-k", "--ssl-no-revoke", "--max-time", "60", "-A", UA, "-s"]
+    if referer:
+        cmd += ["-e", referer]
+    cmd.append(url)
     try:
-        r = subprocess.run(
-            ["curl", "-k", "--ssl-no-revoke", "--max-time", "60", "-A", UA, "-s", url],
-            capture_output=True,
-            text=True,
-            timeout=75,
-        )
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=75)
         return r.stdout
     except Exception:
         return ""
@@ -67,7 +74,7 @@ def get(url):
 def collect(kind):
     feeds, dead = {}, []
     for name, url, fn in SOURCES[kind]:
-        txt = get(url)
+        txt = get(url, REFERERS.get(name))
         try:
             recs = fn(txt) if txt.strip() else None
         except Exception:

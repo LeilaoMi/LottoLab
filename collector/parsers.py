@@ -88,3 +88,28 @@ def parse_17500(text: str, kind: str, main_count: int, special_count: int = 0, l
         out.append({"issue": issue, "main": nums, "special": special, "draw_date": date})
     out.reverse()  # 文件升序 → 输出按 issue 降序（最新在前）
     return out
+
+
+# ---------- 体彩官方 webapi.sporttery.cn（getHistoryPageListV1，需 Referer 头）：dlt ----------
+def parse_sporttery(text: str, kind: str) -> list[dict]:
+    data = json.loads(text)
+    if not data.get("success") or not isinstance(data.get("value"), dict):
+        raise ValueError("sporttery 返回非成功结构")
+    picks = {"dlt": (5, 2)}.get(kind)
+    if not picks:
+        raise ValueError(f"parse_sporttery 不支持 {kind}")
+    mc, sc = picks
+    out = []
+    for it in data["value"].get("list", []):
+        toks = str(it.get("lotteryDrawResult", "")).split()
+        if len(toks) < mc + sc:
+            continue
+        out.append(
+            {
+                "issue": str(it.get("lotteryDrawNum", "")),
+                "main": [int(x) for x in toks[:mc]],
+                "special": [int(x) for x in toks[mc : mc + sc]],
+                "draw_date": str(it.get("lotteryDrawTime", ""))[:10],
+            }
+        )
+    return out
