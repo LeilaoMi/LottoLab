@@ -1,0 +1,27 @@
+# 采集器“每日影子并跑”：真拉公开源 → 归一+交叉校验 → 只写影子表(collect_shadow/collect_shadow_log)
+# → 以正式 draws 为基准记录一致性/落后；有偏差(DIVERGE)才让该 job 失败以触发通知。
+# 安全边界：对正式 draws 仅 SELECT；不做任何 DROP/DELETE/TRUNCATE；不影响站点与 ci.yml。
+# 依赖仓库 secret：DATABASE_URL（你的 Neon 连接串；缺失则本工作流会失败）。
+name: shadow-parallel
+on:
+  schedule:
+    - cron: "45 13 * * *"     # 13:45 UTC = 北京 21:45，各彩种开奖落库之后
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  shadow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python -m pip install --quiet "psycopg[binary]"
+      - name: Run shadow parallel compare
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python collector/shadow_parallel.py
+      - name: Divergence notice hook
+        if: failure()
+        run: echo "::warning::影子并跑发现偏差(DIVERGE)或有源失败，请核查 collector 与生产库差异"
