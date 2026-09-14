@@ -129,3 +129,17 @@ def dlt_prize_tier(main_hits: int, special_hits: int) -> str | None:
         (1, 2): "9",
         (0, 2): "9",
     }.get((main_hits, special_hits))
+
+
+def qlc_prize_tier(main_hits: int, special_hits: int) -> str | None:
+    """七乐彩官方七档：special_hits 传 0/1（是否命中特别号）。对齐 lottery-web prizeQLC。"""
+    return {
+        (7, 1): "1",
+        (7, 0): "1",
+        (6, 1): "2",
+        (6, 0): "3",
+        (5, 1): "4",
+        (5, 0): "5",
+        (4, 1): "6",
+        (4, 0): "7",
+    }.get((main_hits, special_hits))

@@ -7,7 +7,7 @@
 import json
 from pathlib import Path
 
-from lottolab.domain import dlt_prize_tier, ssq_prize_tier
+from lottolab.domain import dlt_prize_tier, qlc_prize_tier, ssq_prize_tier
 
 GOLDEN = json.loads((Path(__file__).parent / "fixtures" / "prize_golden.json").read_text(encoding="utf-8"))
 
@@ -32,8 +32,18 @@ def test_dlt_matches_official_tiers():
             )
 
 
+def test_qlc_matches_official_tiers():
+    for main in range(8):
+        for special in range(2):
+            assert qlc_prize_tier(main, special) == _tier_or_none(GOLDEN["qlc"], main, special), (
+                f"qlc ({main},{special})"
+            )
+
+
 def test_golden_covers_every_prize_tier():
     for tier in ("1", "2", "3", "4", "5", "6"):
         assert tier in GOLDEN["ssq"].values(), f"ssq 缺少奖级 {tier} 的用例"
     for tier in ("1", "2", "3", "4", "5", "6", "7", "8", "9"):
         assert tier in GOLDEN["dlt"].values(), f"dlt 缺少奖级 {tier} 的用例"
+    for tier in ("1", "2", "3", "4", "5", "6", "7"):
+        assert tier in GOLDEN["qlc"].values(), f"qlc 缺少奖级 {tier} 的用例"
