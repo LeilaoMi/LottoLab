@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { api, setAdminToken, useJob, useResource } from './api'
+import { api, LOTTERY_NAME, POOL_RESEARCH, setAdminToken, useJob, useResource } from './api'
 import type { DatasetKind, Health, IngestionResult, Job, Lottery } from './api'
 import { Empty, ErrorNote, JobStatus, Loading } from './components'
 import { Workspace } from './Workspace'
@@ -118,6 +118,8 @@ export function App() {
     methodology: MethodologyPage,
   }
   const CurrentPage = pages[route] || Dashboard
+  const researchOnly = ['statistics', 'models', 'backtest', 'simulation', 'covering'].includes(route)
+  const researchUnsupported = researchOnly && !POOL_RESEARCH.includes(lottery)
   const busy = sourcePending || job?.status === 'queued' || job?.status === 'running'
   const readable = health.data?.can_read === true
   return (
@@ -209,8 +211,11 @@ export function App() {
                   value={lottery}
                   onChange={(e) => setLottery(e.target.value as Lottery)}
                 >
-                  <option value="ssq">双色球</option>
-                  <option value="dlt">大乐透</option>
+                  {Object.entries(LOTTERY_NAME).map(([code, name]) => (
+                    <option key={code} value={code}>
+                      {name}
+                    </option>
+                  ))}
                 </select>
               </label>
               <div className="dataset-switch" aria-label="数据类型">
@@ -289,7 +294,15 @@ export function App() {
                     提交后请等待完成；连接中断时可从实验历史查看状态。
                   </div>
                 )}
-                <CurrentPage key={`${route}-${lottery}-${datasetKind}`} />
+                {researchUnsupported ? (
+                  <div className="notice">
+                    {LOTTERY_NAME[lottery]}{' '}
+                    属数字型/小彩种，科研模块（统计检验/回测/模型/覆盖）当前针对双色球与大乐透；
+                    该彩种请使用「在线工具」（推荐 / 注数 / 验奖）。
+                  </div>
+                ) : (
+                  <CurrentPage key={`${route}-${lottery}-${datasetKind}`} />
+                )}
               </>
             ) : health.data ? (
               <Empty title="进入私人工作台">
@@ -373,7 +386,7 @@ function ImportDialog({
       </button>
       <h2 id="import-title">导入开奖记录</h2>
       <p>
-        导入到{lottery === 'ssq' ? '双色球' : '大乐透'} · {kind === 'real' ? '真实数据' : '演示数据'}
+        导入到{LOTTERY_NAME[lottery]} · {kind === 'real' ? '真实数据' : '演示数据'}
         。每条记录会先校验，冲突不会覆盖原数据。
       </p>
       <form onSubmit={submit}>

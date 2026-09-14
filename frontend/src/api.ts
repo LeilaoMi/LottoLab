@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
 
-export type Lottery = 'ssq' | 'dlt'
+export type Lottery = 'ssq' | 'dlt' | 'qlc' | 'kl8' | 'fc3d' | 'pl3' | 'pl5' | 'qxc'
+export const LOTTERY_NAME: Record<Lottery, string> = {
+  ssq: '双色球',
+  dlt: '大乐透',
+  qlc: '七乐彩',
+  kl8: '快乐8',
+  fc3d: '福彩3D',
+  pl3: '排列3',
+  pl5: '排列5',
+  qxc: '七星彩',
+}
+export const POOL_RESEARCH: Lottery[] = ['ssq', 'dlt']
 export type DatasetKind = 'real' | 'synthetic'
 export interface Scope {
   lottery: Lottery
