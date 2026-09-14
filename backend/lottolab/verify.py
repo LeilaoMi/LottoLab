@@ -142,3 +142,60 @@ def score_ticket(kind: str, ticket: dict[str, Any], draw: dict[str, Any]) -> dic
     exact = pos == sp["main"] and len(digits) == sp["main"]
     grade = "全中" if exact else (f"中{pos}位" if pos else "未中")
     return {"hit_pos": pos, "total": sp["main"], "grade": grade, "amount": None}
+
+
+def verify_batch(
+    kind: str,
+    draws: list[dict[str, Any]],
+    tickets: list[str],
+    codes: list[Any],
+    mult: int = 1,
+) -> dict[str, Any]:
+    """一沓票 × 多期开奖 → 逐注逐期结果 + 汇总。金额纪律：中浮动/换规则→计入 amount_unknown，不猜金额。"""
+    parsed: list[dict[str, Any]] = []
+    for i, line in enumerate(tickets):
+        parsed.append({"line": i + 1, "ticket": line, **parse_ticket(kind, line)})
+    by_code: dict[str, dict[str, Any]] = {str(d.get("code") or d.get("issue")): d for d in draws}
+
+    rounds: list[dict[str, Any]] = []
+    t_won = t_amt = t_unknown = 0
+    for code in (str(c) for c in codes):
+        draw = by_code.get(code)
+        if draw is None:
+            rounds.append({"code": code, "drawn": False, "note": "期号不存在或未开奖", "results": []})
+            continue
+        results: list[dict[str, Any]] = []
+        won = amt = unknown = 0
+        for pr in parsed:
+            if "error" in pr:
+                results.append({"ticket": pr["ticket"], "error": pr["error"]})
+                continue
+            sc = score_ticket(kind, {"main": pr["main"], "aux": pr["aux"]}, draw)
+            grade = sc.get("grade")
+            row: dict[str, Any] = {"ticket": pr["ticket"], "grade": grade, "amount": sc.get("amount")}
+            if sc.get("tier") is not None:
+                row["tier"] = sc["tier"]
+            results.append(row)
+            if grade not in (None, "未中"):
+                won += mult
+                if sc.get("amount") is None:
+                    unknown += 1
+                else:
+                    amt += int(sc["amount"]) * mult
+        t_won += won
+        t_amt += amt
+        t_unknown += unknown
+        rounds.append(
+            {
+                "code": code,
+                "drawn": True,
+                "results": results,
+                "summary": {"won": won, "amount": amt, "amount_unknown": unknown},
+            }
+        )
+    return {
+        "kind": kind,
+        "rounds": rounds,
+        "total": {"won": t_won, "amount": t_amt, "amount_unknown": t_unknown},
+        "note": "amount_unknown>0 表示中了浮动奖/换规则彩种，金额以官方公告为准",
+    }

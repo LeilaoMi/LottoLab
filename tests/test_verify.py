@@ -1,6 +1,6 @@
 """验奖引擎迁入 trunk 的单测（对等 worker/src/verify-batch.js）。"""
 
-from lottolab.verify import parse_ticket, score_ticket
+from lottolab.verify import parse_ticket, score_ticket, verify_batch
 
 
 def test_parse_ssq_ok_and_errors():
@@ -51,3 +51,23 @@ def test_score_pl5_positional():
     t = parse_ticket("pl5", "1 2 3 4 5")
     r = score_ticket("pl5", t, {"digits": [1, 2, 3, 4, 5]})
     assert r["grade"] == "全中" and r["amount"] is None
+
+
+def test_verify_batch_summary_and_missing_period():
+    draws = [{"code": "2026106", "red": [6, 11, 13, 14, 22, 30], "blue": 14}]
+    tickets = ["06 11 13 14 22 30 + 14", "01 02 03 04 05 06 + 07"]  # 一等奖(浮动) / 未中
+    res = verify_batch("ssq", draws, tickets, ["2026106", "2026105"])
+    assert res["total"]["won"] == 1 and res["total"]["amount"] == 0 and res["total"]["amount_unknown"] == 1
+    byc = {r["code"]: r for r in res["rounds"]}
+    assert byc["2026106"]["drawn"] is True and byc["2026105"]["drawn"] is False
+    grades = [x.get("grade") for x in byc["2026106"]["results"]]
+    assert grades == ["一等奖", "未中"]
+
+
+def test_verify_batch_fixed_amount_and_error_ticket():
+    draws = [{"code": "2026106", "red": [6, 11, 13, 14, 22, 30], "blue": 14}]
+    res = verify_batch("ssq", draws, ["06 11 13 14 22 07 + 14", "bad"], ["2026106"])
+    r0 = res["rounds"][0]["results"]
+    assert r0[0]["grade"] == "三等奖" and r0[0]["amount"] == 3000
+    assert r0[1].get("error") is not None
+    assert res["total"]["amount"] == 3000 and res["total"]["won"] == 1
