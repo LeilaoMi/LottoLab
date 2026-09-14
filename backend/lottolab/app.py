@@ -23,10 +23,12 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import __version__
 from .analysis import summarize
+from .calc import calc_bet
 from .config import Settings, get_settings
 from .db import Draw, IngestionRun, Job, QualityIssue, make_engine, make_session_factory, now
 from .domain import DISCLAIMER, RULES, DatasetKind, DrawInput, Lottery
 from .ingestion import digest, freeze_dataset, ingest_records, load_draws, parse_csv
+from .predict import recommend
 from .schemas import (
     BacktestRequest,
     CoverRequest,
@@ -37,6 +39,7 @@ from .schemas import (
     SyncRequest,
     TicketRequest,
 )
+from .verify import verify_batch
 from .worker import expire_interrupted_jobs, run_request_job
 
 logger = logging.getLogger("lottolab")
@@ -301,6 +304,67 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
     ):
         rows = load_draws(db, lottery, dataset_kind)
         return summarize(rows[-window:], RULES[lottery])
+
+    ONLINE_KINDS = {"ssq", "dlt", "qlc", "kl8", "fc3d", "pl3", "pl5", "qxc"}
+
+    def _rows(db: Session, kind: str) -> list[dict]:
+        return [
+            d.public()
+            for d in db.scalars(
+                select(Draw)
+                .where(Draw.lottery == kind, Draw.dataset_kind == "real")
+                .order_by(Draw.draw_date, Draw.issue)
+            )
+        ]
+
+    def _as_online(kind: str, rows: list[dict]) -> list[dict]:
+        out = []
+        for r in rows:
+            main = r["main_numbers"]
+            spc = r["special_numbers"] or []
+            base: dict = {"code": r["issue"], "date": str(r["draw_date"])}
+            if kind == "ssq":
+                base.update(red=main, blue=(spc[0] if spc else 0))
+            elif kind == "dlt":
+                base.update(front=main, back=spc)
+            elif kind == "qlc":
+                base.update(main=main, special=(spc[0] if spc else 0))
+            elif kind == "kl8":
+                base.update(nums=main)
+            else:
+                base.update(digits=main)
+            out.append(base)
+        return out
+
+    @app.get("/api/v1/bet")
+    def bet(kind: str, p: str = "{}"):
+        if kind not in ONLINE_KINDS:
+            raise HTTPException(400, "未知彩种")
+        try:
+            params = json.loads(p or "{}")
+        except json.JSONDecodeError:
+            raise HTTPException(422, "参数 p 须为 JSON") from None
+        return calc_bet(kind, params)
+
+    @app.post("/api/v1/verify")
+    def verify(db: DB, payload: dict):
+        kind = str(payload.get("kind", ""))
+        if kind not in ONLINE_KINDS:
+            raise HTTPException(400, "未知彩种")
+        lines = [str(x) for x in (payload.get("lines") or [])]
+        codes = [str(c) for c in (payload.get("codes") or [])]
+        if not lines or not codes:
+            raise HTTPException(422, "需要 lines 与 codes")
+        return verify_batch(kind, _as_online(kind, _rows(db, kind)), lines, codes)
+
+    @app.get("/api/v1/recommend")
+    def recommend_ep(db: DB, kind: str = "ssq", seed: int = 1):
+        if kind not in ONLINE_KINDS:
+            raise HTTPException(400, "未知彩种")
+        rows = _as_online(kind, _rows(db, kind))
+        if not rows:
+            raise HTTPException(404, f"{kind} 暂无可用开奖数据（trunk 尚未收录该彩种，见 B3）")
+        return recommend(kind, rows, seed)
 
     @app.get("/api/v1/ingestions")
     def ingestions(db: DB, lottery: Lottery = "ssq", dataset_kind: DatasetKind = "real"):
