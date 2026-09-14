@@ -13,7 +13,8 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 
 SOURCES = {
     "ssq": [("cwl", "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name=ssq&issueCount=8", lambda t: P.parse_cwl(t, "ssq")),
-            ("500", "https://datachart.500.com/ssq/history/newinc/history.php?limit=8&sort=0", lambda t: P.parse_500(t, "ssq"))],
+            ("500", "https://datachart.500.com/ssq/history/newinc/history.php?limit=8&sort=0", lambda t: P.parse_500(t, "ssq")),
+            ("17500", "http://data.17500.cn/ssq_asc.txt", lambda t: P.parse_17500(t, "ssq", 6, 1))],  # 红6+蓝1；cwl 在 GH 美区常不可达时仍有 500+17500 双源
     "dlt": [("500", "https://datachart.500.com/dlt/history/newinc/history.php?limit=8&sort=0", lambda t: P.parse_500(t, "dlt")),
             ("17500", "http://data.17500.cn/dlt_asc.txt", lambda t: P.parse_17500(t, "dlt", 5, 2))],  # 前5+后2、5位期号→真第二独立源
 }
