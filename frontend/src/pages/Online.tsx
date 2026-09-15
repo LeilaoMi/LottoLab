@@ -101,6 +101,8 @@ export function OnlinePage() {
 
   const [mainCount, setMainCount] = useState(lottery === 'ssq' ? 7 : 6)
   const [auxCount, setAuxCount] = useState(lottery === 'ssq' ? 1 : 3)
+  const [betMode, setBetMode] = useState<'duplex' | 'dantuo'>('duplex')
+  const [danCount, setDanCount] = useState(2)
   const [bet, setBet] = useState<BetResult | null>(null)
   const [betErr, setBetErr] = useState('')
 
@@ -115,8 +117,17 @@ export function OnlinePage() {
 
   async function calcBet() {
     setBetErr('')
-    const params =
-      lottery === 'ssq' ? { red: mainCount, blue: auxCount } : { front: mainCount, back: auxCount }
+    let params: Record<string, number>
+    if (betMode === 'dantuo') {
+      params =
+        lottery === 'ssq'
+          ? { dan: danCount, tuo: mainCount, blue: auxCount }
+          : lottery === 'dlt'
+            ? { fdan: danCount, ftuo: mainCount, btuo: auxCount }
+            : { dan: danCount, tuo: mainCount }
+    } else {
+      params = lottery === 'ssq' ? { red: mainCount, blue: auxCount } : { front: mainCount, back: auxCount }
+    }
     try {
       setBet(await api<BetResult>(`/bet?kind=${lottery}&p=${encodeURIComponent(JSON.stringify(params))}`))
     } catch (e) {
@@ -308,9 +319,31 @@ export function OnlinePage() {
         <div className="card-head">
           <h2>注数与金额</h2>
         </div>
+        {['ssq', 'dlt', 'qlc'].includes(lottery) && (
+          <div className="segmented" style={{ marginBottom: 8 }}>
+            <button className={betMode === 'duplex' ? 'active' : ''} onClick={() => setBetMode('duplex')}>
+              复式
+            </button>
+            <button className={betMode === 'dantuo' ? 'active' : ''} onClick={() => setBetMode('dantuo')}>
+              胆拖
+            </button>
+          </div>
+        )}
         <div className="inline-actions">
+          {betMode === 'dantuo' && (
+            <label className="muted">
+              胆码数
+              <input
+                type="number"
+                min={1}
+                max={5}
+                value={danCount}
+                onChange={(e) => setDanCount(+e.target.value)}
+              />
+            </label>
+          )}
           <label className="muted">
-            主区号码数
+            {betMode === 'dantuo' ? '拖码数' : '主区号码数'}
             <input
               type="number"
               min={5}
