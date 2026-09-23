@@ -11,7 +11,9 @@
 | GET | 公开 | 私有部署（`LOTTOLAB_REQUIRE_READ_AUTH=true`）下需令牌；`health/rules/models` 始终公开 |
 | POST | 需写权限 | 本机回环 + 允许本地写入，或 `X-Admin-Token`；云端未设令牌时公开，设令牌后需令牌（已设令牌不足 32 字符启动失败） |
 
-写请求按 IP 滑动窗口限流（默认 120 次/分，`LOTTOLAB_RATE_LIMIT_POSTS_PER_MINUTE`，0 关闭），超限 429。`X-Forwarded-For` 仅在直连地址为受信代理（回环/内网或 `LOTTOLAB_TRUSTED_PROXIES`）时采用；缺 `Content-Length` 的 POST 直接 413。CSV 另有大小限制（本地 8 MiB / 云端 4 MiB）。
+写请求按 IP 滑动窗口限流（默认 120 次/分，`LOTTOLAB_RATE_LIMIT_POSTS_PER_MINUTE`，0 关闭），超限 429；重算类 GET（`/recommend`、`/verify`、`/optimizations`）另有默认 60 次/分/IP（`LOTTOLAB_RATE_LIMIT_HEAVY_GETS_PER_MINUTE`，0 关闭）。限流计数先于鉴权与只读校验执行，失败鉴权的请求同样消耗预算。`X-Forwarded-For` 仅在直连地址为受信代理（回环/内网或 `LOTTOLAB_TRUSTED_PROXIES`）时采用（取链上最右一跳）；缺 `Content-Length` 的 POST 直接 413。CSV 另有大小限制（本地 8 MiB / 云端 4 MiB）。`/api/*` 响应带 `X-Content-Type-Options: nosniff` 与 `Referrer-Policy`；写接口额外 `frame-ancestors 'none'`。
+
+管理员令牌已设置时长度不足 32 且未启用本地写入会启动失败。`POST /verify`、`POST /predictions` 与其它写入一致需写权限；`GET /predictions/review` 默认只读，`reconcile=true` 触发对账写库且同样需写权限。
 
 ## 只读
 
@@ -31,7 +33,7 @@
 | `/api/v1/verify` | kind, lines(换行分隔), codes(逗号分隔) | 只读验奖，单次 200 注×10 期 |
 | `/api/v1/recommend` | kind, seed, groups(≤8) | 多策略推荐 + 结构分/撞号/冷门度 |
 | `/api/v1/recommend/backtest` | kind, window(20–300) | 各策略滚动回测 vs 均匀期望 |
-| `/api/v1/predictions/review` | kind, reconcile(默认 false) | 台账只读汇总；`reconcile=true` 才触发对账写库 |
+| `/api/v1/predictions/review` | kind, reconcile(默认 false) | 台账只读汇总；`reconcile=true` 才触发对账写库（需写权限，无令牌 403） |
 | `/api/v1/ingestions` | lottery, dataset_kind | 最近 50 次导入记录 |
 | `/api/v1/quality` | lottery, dataset_kind | 未处理质量问题（含冲突双方） |
 | `/api/v1/jobs` | lottery, dataset_kind, kind | 最近 40 个任务（不含完整结果） |

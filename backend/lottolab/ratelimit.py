@@ -52,7 +52,12 @@ def _is_proxy_hop(ip: str, trusted: list[str]) -> bool:
 
 
 def client_ip(request: Request, trusted_proxies: list[str] | None = None) -> str:
-    """Client key: peer address, or rightmost untrusted XFF hop if peer is a trusted proxy."""
+    """Client key: peer address, or rightmost untrusted XFF hop if peer is a trusted proxy.
+
+    When every XFF hop is itself a trusted proxy (private LAN client behind
+    reverse proxies), prefer the rightmost entry — the hop appended by the
+    nearest proxy — so a client cannot rotate a leftmost spoofed value.
+    """
     peer = request.client.host if request.client else "unknown"
     trusted = trusted_proxies or []
     if not _is_proxy_hop(peer, trusted):
@@ -63,5 +68,5 @@ def client_ip(request: Request, trusted_proxies: list[str] | None = None) -> str
         if not _is_proxy_hop(ip, trusted):
             return ip
     if parts:
-        return parts[0]
+        return parts[-1]
     return peer

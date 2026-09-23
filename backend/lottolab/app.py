@@ -80,6 +80,8 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
     resolution_lock = Lock()
     enqueue_lock = Lock()
     limiter = PostRateLimiter(settings.rate_limit_posts_per_minute)
+    heavy_get_limiter = PostRateLimiter(settings.rate_limit_heavy_gets_per_minute)
+    heavy_get_prefixes = ("/api/v1/recommend", "/api/v1/verify", "/api/v1/optimizations")
 
     @asynccontextmanager
     async def lifespan(_app):
@@ -124,44 +126,69 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         )
 
     @app.middleware("http")
-    async def post_rate_limit(request: Request, call_next):
-        if request.method == "POST" and request.url.path.startswith("/api/"):
-            if not limiter.allowed(client_ip(request, settings.proxy_list)):
-                return JSONResponse(status_code=429, content={"detail": "请求过于频繁，请稍后再试"})
-        return await call_next(request)
-
-    @app.middleware("http")
-    async def response_headers(request: Request, call_next):
+    async def api_guards(request: Request, call_next):
+        """Rate limit BEFORE auth so failed-auth floods still consume budget."""
+        path = request.url.path
+        ip = client_ip(request, settings.proxy_list)
+        if path.startswith("/api/"):
+            if request.method == "POST":
+                if not limiter.allowed(ip):
+                    return _guarded(
+                        JSONResponse(status_code=429, content={"detail": "请求过于频繁，请稍后再试"}),
+                        path,
+                    )
+            elif request.method == "GET" and path.startswith(heavy_get_prefixes):
+                if not heavy_get_limiter.allowed(ip):
+                    return _guarded(
+                        JSONResponse(status_code=429, content={"detail": "请求过于频繁，请稍后再试"}),
+                        path,
+                    )
         public_api = {"/api/v1/health", "/api/v1/rules", "/api/v1/models"}
         if (
             settings.require_read_auth
-            and request.url.path.startswith("/api/")
-            and request.url.path not in public_api
+            and path.startswith("/api/")
+            and path not in public_api
             and request.method != "OPTIONS"
             and not can_write(request, settings)
         ):
-            return JSONResponse(
-                status_code=403,
-                content={"detail": "请先验证管理员令牌以访问私人工作台"},
-                headers={"Cache-Control": "no-store"},
+            return _guarded(
+                JSONResponse(
+                    status_code=403,
+                    content={"detail": "请先验证管理员令牌以访问私人工作台"},
+                    headers={"Cache-Control": "no-store"},
+                ),
+                path,
             )
-        if request.method == "POST" and request.url.path.startswith("/api/"):
+        if request.method == "POST" and path.startswith("/api/"):
             if not can_write(request, settings):
-                return JSONResponse(
-                    status_code=403, content={"detail": "需要管理员权限或明确启用的本地访问权限"}
+                return _guarded(
+                    JSONResponse(
+                        status_code=403, content={"detail": "需要管理员权限或明确启用的本地访问权限"}
+                    ),
+                    path,
                 )
-            limit = settings.max_csv_bytes + 65536 if request.url.path == "/api/v1/imports/csv" else 65536
+            limit = settings.max_csv_bytes + 65536 if path == "/api/v1/imports/csv" else 65536
             length = request.headers.get("content-length")
             if length is None:
                 # chunked 无 Content-Length 时无法在读体前限幅 → 拒绝，防绕过
-                return JSONResponse(status_code=413, content={"detail": "请求缺少 Content-Length，已拒绝"})
+                return _guarded(
+                    JSONResponse(status_code=413, content={"detail": "请求缺少 Content-Length，已拒绝"}),
+                    path,
+                )
             if not length.isdigit() or int(length) > limit:
-                return JSONResponse(status_code=413, content={"detail": "请求内容超过大小限制"})
+                return _guarded(
+                    JSONResponse(status_code=413, content={"detail": "请求内容超过大小限制"}),
+                    path,
+                )
         response = await call_next(request)
+        return _guarded(response, path)
+
+    def _guarded(response: Response, path: str = "") -> Response:
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
-        if request.url.path.startswith("/api/"):
-            response.headers["Cache-Control"] = "no-store"
+        response.headers["Content-Security-Policy"] = "frame-ancestors 'none'; base-uri 'self'"
+        if path.startswith("/api/"):
+            response.headers.setdefault("Cache-Control", "no-store")
         return response
 
     @app.get("/api/v1/health")
@@ -357,7 +384,7 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
             raise HTTPException(422, "单次最多验 200 注×10 期")
         return verify_batch(kind, _as_online(kind, _rows(db, kind)), lines, codes)
 
-    @app.post("/api/v1/verify")
+    @app.post("/api/v1/verify", dependencies=[Depends(authorize)])
     def verify(db: DB, payload: dict):
         kind = str(payload.get("kind", ""))
         lines = [str(x) for x in (payload.get("lines") or [])]
@@ -375,7 +402,7 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
             raise HTTPException(400, "未知彩种")
         rows = _as_online(kind, _rows(db, kind))
         if not rows:
-            raise HTTPException(404, f"{kind} 暂无可用开奖数据（trunk 尚未收录该彩种，见 B3）")
+            raise HTTPException(404, f"{kind} 暂无可用开奖数据；请先同步或导入该彩种")
         single = recommend(kind, rows, seed)
         multi = recommend_multi(kind, rows, seed, groups)
         return {
@@ -396,7 +423,7 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
             raise HTTPException(404, f"{kind} 暂无可用开奖数据")
         return backtest_strategies(kind, rows, window)
 
-    @app.post("/api/v1/predictions")
+    @app.post("/api/v1/predictions", dependencies=[Depends(authorize)])
     def log_predictions_ep(payload: dict, db: DB):
         kind = str(payload.get("kind", ""))
         if kind not in ONLINE_KINDS:
@@ -410,11 +437,13 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         return {"logged": n, "kind": kind, "target_issue": target_issue}
 
     @app.get("/api/v1/predictions/review")
-    def review_predictions_ep(db: DB, kind: str = "ssq", reconcile: bool = Query(False)):
-        """GET 默认只读汇总；显式 reconcile=true 才触发对账写库（Online 页按钮）。"""
+    def review_predictions_ep(request: Request, db: DB, kind: str = "ssq", reconcile: bool = Query(False)):
+        """GET 默认只读汇总；显式 reconcile=true 才对账写库（需写权限，Online 页按钮）。"""
         if kind not in ONLINE_KINDS:
             raise HTTPException(400, "未知彩种")
         if reconcile:
+            if not can_write(request, settings):
+                raise HTTPException(403, "对账写库需要管理员权限")
             reconcile_sessions(db, kind)
         return review_summary(db, kind)
 
@@ -624,12 +653,13 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
 
     @app.get("/api/v1/jobs")
     def list_jobs(
+        request: Request,
         db: DB,
         lottery: Lottery = "ssq",
         dataset_kind: DatasetKind = "real",
         kind: str | None = Query(None, max_length=32),
     ):
-        if settings.execution_mode == "request":
+        if settings.execution_mode == "request" and can_write(request, settings):
             expire_interrupted_jobs(db, settings)
             db.commit()
         query = select(Job).where(Job.lottery == lottery, Job.dataset_kind == dataset_kind)
@@ -640,8 +670,8 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
 
     @app.get("/api/v1/jobs/{job_id}")
     @app.get("/api/v1/backtests/{job_id}")
-    def get_job(job_id: str, db: DB):
-        if settings.execution_mode == "request":
+    def get_job(request: Request, job_id: str, db: DB):
+        if settings.execution_mode == "request" and can_write(request, settings):
             expire_interrupted_jobs(db, settings)
             db.commit()
         job = db.get(Job, job_id)

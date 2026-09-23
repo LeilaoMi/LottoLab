@@ -310,14 +310,23 @@ export function useJob<T>(id: string | null) {
     if (!id) return
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout>
+    let failures = 0
     async function poll() {
       try {
         const value = await api<Job<T>>(`/jobs/${id}`, { signal: controller.signal })
         if (controller.signal.aborted) return
+        failures = 0
+        setError('')
         setJob(value)
         if (value.status === 'queued' || value.status === 'running') timer = setTimeout(poll, 1200)
       } catch (e) {
-        if (!controller.signal.aborted) setError(e instanceof Error ? e.message : '任务读取失败')
+        if (controller.signal.aborted) return
+        failures += 1
+        if (failures < 5) {
+          timer = setTimeout(poll, 2000 * failures)
+        } else {
+          setError(e instanceof Error ? e.message : '任务读取失败')
+        }
       }
     }
     void poll()

@@ -477,7 +477,7 @@ export function OnlinePage() {
                   <input
                     type="number"
                     min={1}
-                    max={5}
+                    max={lottery === 'dlt' ? 4 : lottery === 'qlc' ? 6 : 5}
                     value={danCount}
                     onChange={(e) => setDanCount(+e.target.value)}
                   />
@@ -487,7 +487,7 @@ export function OnlinePage() {
                 {betMode === 'dantuo' ? '拖码数' : '主区号码数'}
                 <input
                   type="number"
-                  min={lottery === 'qlc' ? 7 : 5}
+                  min={betMode === 'duplex' ? (lottery === 'ssq' ? 6 : lottery === 'qlc' ? 7 : 5) : 1}
                   max={lottery === 'ssq' ? 33 : lottery === 'qlc' ? 30 : 35}
                   value={mainCount}
                   onChange={(e) => setMainCount(+e.target.value)}
@@ -495,10 +495,10 @@ export function OnlinePage() {
               </label>
               {lottery !== 'qlc' && (
                 <label className="muted">
-                  辅区号码数
+                  {lottery === 'dlt' && betMode === 'duplex' ? '后区号码数' : '辅区号码数'}
                   <input
                     type="number"
-                    min={1}
+                    min={lottery === 'dlt' && betMode === 'duplex' ? 2 : 1}
                     max={lottery === 'ssq' ? 16 : 12}
                     value={auxCount}
                     onChange={(e) => setAuxCount(+e.target.value)}
@@ -577,7 +577,7 @@ export function OnlinePage() {
           <h2>批量验奖</h2>
         </div>
         <label className="muted">
-          票面（每行一注，如 01 05 13 14 22 30 + 04）
+          票面（每行一注；号码空格分隔，有附加区用 + 连接，如 01 05 13 14 22 30 + 04；快乐8/数字型无 +）
           <textarea rows={4} value={tickets} onChange={(e) => setTickets(e.target.value)} />
         </label>
         <label className="muted">

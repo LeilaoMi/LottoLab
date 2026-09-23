@@ -20,7 +20,9 @@ def test_wal_backup_preserves_committed_rows_and_only_lists_persistent_files(tmp
     raw = b'{"source":"isolated-backup-fixture"}'
     raw_name = hashlib.sha256(raw).hexdigest() + ".snapshot"
     (raw_directory / raw_name).write_bytes(raw)
-    (tmp_path / ".env").write_text("LOTTOLAB_ADMIN_TOKEN=isolated-backup-fixture\n", encoding="utf-8")
+    (tmp_path / ".env").write_text(
+        "LOTTOLAB_ADMIN_TOKEN=isolated-backup-fixture-token-32-chars\n", encoding="utf-8"
+    )
     with closing(sqlite3.connect(tmp_path / ".local" / "lottolab.db")) as source:
         source.execute("PRAGMA journal_mode=WAL")
         source.execute("CREATE TABLE samples (value TEXT NOT NULL)")

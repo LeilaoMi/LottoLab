@@ -6,6 +6,7 @@ from math import isclose
 
 import pytest
 from lottolab.analysis import simulate
+from lottolab.config import Settings
 from lottolab.db import Draw, PredictionLog
 from lottolab.domain import RULES, qlc_prize_tier
 from lottolab.predict import _rank_pick, _zone_cover, backtest_strategies, recommend_multi
@@ -299,4 +300,106 @@ def test_review_endpoint_get_defaults_readonly():
     # 对账调用必须包在显式开关内
     body = src.split("def review_predictions_ep", 1)[1].split("def ", 1)[0]
     assert "if reconcile:" in body
+    assert "can_write(request, settings)" in body
     assert "reconcile_sessions(db, kind)" in body
+
+
+# ---------- C5/B 残余：限流先于鉴权、reconcile 写权限、短 token、CSV 空附加区 ----------
+
+
+def test_settings_reject_short_admin_token_without_local_writes():
+    with pytest.raises(ValueError, match="不足 32"):
+        Settings(_env_file=None, admin_token="too-short", allow_local_writes=False)
+    assert (
+        Settings(_env_file=None, admin_token="too-short", allow_local_writes=True).admin_token == "too-short"
+    )
+
+
+def test_rate_limit_consumes_budget_before_failed_auth(session_factory, tmp_path):
+    """失败鉴权的 POST 也要耗限流预算（中间件限流先于 can_write）。"""
+    from fastapi.testclient import TestClient
+    from lottolab.app import create_app
+
+    settings = Settings(
+        _env_file=None,
+        data_dir=tmp_path,
+        allow_local_writes=False,
+        allowed_hosts="127.0.0.1,testserver",
+        admin_token="test-only-token-32-characters-ok",
+        rate_limit_posts_per_minute=1,
+    )
+    client = TestClient(
+        create_app(settings, session_factory), base_url="http://127.0.0.1:8000", client=("203.0.113.9", 55000)
+    )
+    body = {"lottery": "ssq", "iterations": 1000}
+    assert client.post("/api/v1/simulations", json=body).status_code == 403
+    limited = client.post("/api/v1/simulations", json=body)
+    assert limited.status_code == 429
+    assert "频繁" in limited.json()["detail"]
+
+
+def test_heavy_get_rate_limit(session_factory, tmp_path):
+    from fastapi.testclient import TestClient
+    from lottolab.app import create_app
+
+    settings = Settings(
+        _env_file=None,
+        data_dir=tmp_path,
+        allow_local_writes=True,
+        allowed_hosts="127.0.0.1,testserver",
+        admin_token="test-only-token-32-characters-ok",
+        rate_limit_heavy_gets_per_minute=1,
+    )
+    client = TestClient(
+        create_app(settings, session_factory), base_url="http://127.0.0.1:8000", client=("127.0.0.1", 55000)
+    )
+    assert client.get("/api/v1/recommend?kind=fc3d").status_code == 404
+    limited = client.get("/api/v1/recommend?kind=fc3d")
+    assert limited.status_code == 429
+    # 普通 GET 不计入 heavy 预算
+    assert client.get("/api/v1/health").status_code == 200
+
+
+def test_reconcile_requires_write_permission(session_factory, tmp_path):
+    from fastapi.testclient import TestClient
+    from lottolab.app import create_app
+
+    token = "test-only-token-32-characters-ok"
+    settings = Settings(
+        _env_file=None,
+        data_dir=tmp_path,
+        allow_local_writes=False,
+        allowed_hosts="lab.example,testserver",
+        allowed_origins="https://lab.example",
+        admin_token=token,
+        require_read_auth=False,
+    )
+    client = TestClient(create_app(settings, session_factory), base_url="https://lab.example")
+    assert client.get("/api/v1/predictions/review?kind=ssq").status_code == 200
+    assert client.get("/api/v1/predictions/review?kind=ssq&reconcile=true").status_code == 403
+    with_token = client.get(
+        "/api/v1/predictions/review?kind=ssq&reconcile=true", headers={"X-Admin-Token": token}
+    )
+    assert with_token.status_code == 200
+
+
+def test_client_ip_takes_last_trusted_xff():
+    from lottolab.ratelimit import client_ip
+    from starlette.requests import Request
+
+    # 受信代理 peer → 取 XFF 最右非代理跳（真实客户端）
+    trusted_scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/",
+        "headers": [(b"host", b"lab.example"), (b"x-forwarded-for", b"10.0.0.1, 93.184.216.34")],
+        "client": ("10.0.0.1", 1),
+        "server": ("lab.example", 443),
+        "scheme": "https",
+        "query_string": b"",
+        "root_path": "",
+    }
+    assert client_ip(Request(trusted_scope), trusted_proxies=["10.0.0.1"]) == "93.184.216.34"
+    # 非受信直连 → 忽略伪造 XFF，按对端 IP
+    direct_scope = dict(trusted_scope, client=("8.8.8.8", 1))
+    assert client_ip(Request(direct_scope), trusted_proxies=[]) == "8.8.8.8"

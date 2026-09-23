@@ -361,7 +361,9 @@ export function BacktestPage() {
               <>
                 <div className="metric-strip compact">
                   <Metric label="主区二元 Log Loss" value={fmt(model.metrics.main_log_loss, 5)} />
-                  <Metric label="附加区 Brier" value={fmt(model.metrics.special_brier, 5)} />
+                  {workspace.lottery !== 'kl8' && (
+                    <Metric label="附加区 Brier" value={fmt(model.metrics.special_brier, 5)} />
+                  )}
                   <Metric label="Precision@K" value={pct(model.metrics.precision_at_k, 2)} />
                   <Metric
                     label="税前模拟 ROI"

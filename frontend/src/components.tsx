@@ -16,19 +16,27 @@ export function Balls({
   return (
     <div
       className={`balls ${compact ? 'balls-compact' : ''}`}
-      aria-label={`主区 ${main.join('、')}，附加区 ${special.join('、')}`}
+      aria-label={
+        special.length > 0
+          ? `主区 ${main.join('、')}，附加区 ${special.join('、')}`
+          : `主区 ${main.join('、')}`
+      }
     >
       {main.map((n) => (
         <span className="ball ball-main" key={`m${n}`}>
           {String(n).padStart(2, '0')}
         </span>
       ))}
-      <span className="ball-divider" />
-      {special.map((n) => (
-        <span className="ball ball-special" key={`s${n}`}>
-          {String(n).padStart(2, '0')}
-        </span>
-      ))}
+      {special.length > 0 && (
+        <>
+          <span className="ball-divider" />
+          {special.map((n) => (
+            <span className="ball ball-special" key={`s${n}`}>
+              {String(n).padStart(2, '0')}
+            </span>
+          ))}
+        </>
+      )}
     </div>
   )
 }

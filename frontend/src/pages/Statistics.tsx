@@ -89,7 +89,7 @@ export function StatisticsPage() {
               title="逐号码观察"
               subtitle={`本次窗口实际包含 ${data.sample_size} 期；区间是历史入选频率的 95% Wilson 区间。`}
               action={
-                !isDigit ? (
+                !isDigit && data.frequency.special.length > 0 ? (
                   <div className="segmented">
                     <button className={area === 'main' ? 'active' : ''} onClick={() => setArea('main')}>
                       主区
@@ -298,7 +298,11 @@ export function StatisticsPage() {
             <>
               <Panel
                 title="运行一组有边界的检验"
-                subtitle="包含整体频率、离散和值分布、单号频率、游程与序列相关。"
+                subtitle={
+                  isDigit
+                    ? '数字型按位做均匀性卡方检验（精确计算，无需零模型模拟）。'
+                    : '包含整体频率、离散和值分布、单号频率、游程与序列相关。'
+                }
               >
                 <form
                   className="experiment-form"
@@ -307,16 +311,20 @@ export function StatisticsPage() {
                     void experiment.launch({ window, trials })
                   }}
                 >
-                  <label>
-                    零模型模拟次数
-                    <select value={trials} onChange={(e) => setTrials(Number(e.target.value))}>
-                      <option value={999}>999 次（快速查看）</option>
-                      <option value={4999}>4999 次</option>
-                      <option value={9999}>9999 次</option>
-                    </select>
-                  </label>
+                  {!isDigit && (
+                    <label>
+                      零模型模拟次数
+                      <select value={trials} onChange={(e) => setTrials(Number(e.target.value))}>
+                        <option value={999}>999 次（快速查看）</option>
+                        <option value={4999}>4999 次</option>
+                        <option value={9999}>9999 次</option>
+                      </select>
+                    </label>
+                  )}
                   <div className="form-explainer">
-                    固定种子 2026。对全部检验统一做 Bonferroni 校正；有限模拟的 p 值分辨率会影响检验功效。
+                    {isDigit
+                      ? '固定种子 2026。逐位卡方为精确计算，不走 Monte Carlo 模拟。'
+                      : '固定种子 2026。对全部检验统一做 Bonferroni 校正；有限模拟的 p 值分辨率会影响检验功效。'}
                   </div>
                   <RunButton
                     pending={experiment.pending}
@@ -337,7 +345,7 @@ export function StatisticsPage() {
                     <Metric label="检验样本" value={`${fmt(result.sample_size)} 期`} />
                     <Metric label="比较数量" value={result.number_of_tests} />
                     <Metric label="校正后显著项" value={result.significant_count} />
-                    <Metric label="零模型模拟" value={fmt(result.trials)} />
+                    {!isDigit && <Metric label="零模型模拟" value={fmt(result.trials)} />}
                   </div>
                   <Panel
                     title="检验明细"

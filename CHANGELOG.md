@@ -2,8 +2,18 @@
 
 记录已发布版本中影响使用和部署的变化。源码与固定版本下载见 [Releases](https://github.com/LeilaoMi/LottoLab/releases)。
 
-## [未发布]
+## [1.1.1](https://github.com/LeilaoMi/LottoLab/releases/tag/v1.1.1) · 2026-09-24
 
+安全与缺口收口版本（承接多源采集/快乐8期望/复盘只读，补齐 C5 安全项与 B 组前端缺口）：
+
+- **限流先于鉴权**：`api_guards` 中间件先按 IP 计 POST 与重算类 GET（`/recommend`、`/verify`、`/optimizations`，默认 60 次/分，`LOTTOLAB_RATE_LIMIT_HEAVY_GETS_PER_MINUTE`）再做只读/写鉴权；失败鉴权的洪水同样消耗预算，`X-Forwarded-For` 受信链取最右一跳。
+- **写权限补齐**：`POST /verify`、`POST /predictions` 走 `Depends(authorize)`；`GET /predictions/review?reconcile=true` 无写权限 403；中断任务自动过期清理仅写权限执行；`/api/*` 提前返回统一补 `X-Content-Type-Options`、`Referrer-Policy` 与 `frame-ancestors 'none'`。
+- **采集 fail-closed**：`ingest_neon` / `refresh_winners` 生产写路径 HTTPS 空源不再回退明文 http；影子作业 17500 全量 https；全部移除 `curl --ssl-no-revoke`。
+- **CSV 空附加区**：`special_numbers` 留空的行按空附加区导入（原 `int('')` 整行拒收）；本地备份目录 `0700`。
+- **Settings 令牌校验**：短于 32 字符的 `admin_token` 在未启用本地写入时启动失败（与云端文档口径一致）。
+- **CI actions 升 Node24**：`checkout@v6`、`setup-python@v6`、`setup-node@v6`、`upload-artifact@v6`、`pnpm/action-setup@v5`（ci / daily-sync / daily-winners / shadow-parallel）。
+- **前端缺口**：彩种选择写入并校验 `localStorage`；空附加区不再渲染分隔线；CoverPage 目标命中上限 6；统计页附加区仅在有数据时出现、数字型隐藏误导性 trials；任务轮询瞬时失败退避重试；回测隐藏快乐8附加区 Brier；在线注数 min/max 对齐后端 clamp、验奖占位符彩种感知、胆拖文案；导入说明补“无附加区留空”。
+- **回测 Precision@K**：分母改为 ticket_k（快乐8=10），与期望命中口径对齐。
 - **多源采集修复**：同步按彩种路由官方接口（福彩 cwl `name=` / 体彩 `gameNo=`，不再 8 彩种全部 gameNo=85）；快乐8/福彩3D/排列三五/七星彩 影子作业补上第二源交叉；sporttery 需带站内 Referer。
 - **在线工具注数**：七乐彩用 `main`、快乐8 用 `pick/nums`、数字型按位 `pos` 下发；组合覆盖对七乐彩按 7/30 规则取候选池（原误用 5/35）。
 - **复盘 GET 只读**：`GET /predictions/review` 默认不写库，显式 `reconcile=true` 才对账（在线工具按钮传参）。
@@ -11,9 +21,11 @@
 - **七乐彩评分**：复盘对账将特别号视为基本区命中（与验奖口径一致）。
 - **随机建议公平性**：推荐破平局消费 seeded RNG，区间覆盖/附加区加确定性抖动，避免同种子总是同票。
 - **样本外闸门**：冷门度流行度学习（含数字型）仅在 70/30 验证段与训练符号一致时通过，否则 fail-closed。
-- **安全加固**：管理员令牌已设置时长度不足 32 直接启动失败；`X-Forwarded-For` 仅受信代理链生效（`LOTTOLAB_TRUSTED_PROXIES`）；缺 `Content-Length` 的 POST 拒绝；worker 错误信息脱敏；采集脚本去掉 `curl -k`、17500 优先 https；空源/分歧作业非零退出；GitHub Actions 加 concurrency、钉 `psycopg[binary]`。
+- **安全加固**：`X-Forwarded-For` 仅受信代理链生效（`LOTTOLAB_TRUSTED_PROXIES`）；缺 `Content-Length` 的 POST 拒绝；worker 错误信息脱敏；采集脚本去掉 `curl -k`；空源/分歧作业非零退出；GitHub Actions 加 concurrency、钉 `psycopg[binary]`。
 - **回测稳定性对照**：测试窗前后半平均优势对照（CONSISTENT / INCONSISTENT / TOO_SHORT），纯描述性，不做检验、不参与 verdict；回测页新增对照列。
 - **回测报告脚本**：`python scripts/export_report.py 报告.json` 把 JSON 导出渲染为 Markdown 摘要（打到控制台，自存 `.local/`，不进仓库）。
+
+## [未发布]
 
 ## [1.1.0](https://github.com/LeilaoMi/LottoLab/releases/tag/v1.1.0) · 2026-09-18
 

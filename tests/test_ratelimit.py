@@ -12,7 +12,7 @@ def client_for(factory, tmp_path, per_minute):
         data_dir=tmp_path,
         allow_local_writes=True,
         allowed_hosts="127.0.0.1,testserver",
-        admin_token="test-only-token",
+        admin_token="test-only-token-32-characters-ok",
         rate_limit_posts_per_minute=per_minute,
     )
     return TestClient(
@@ -48,6 +48,34 @@ def test_post_rate_limit_does_not_touch_get(session_factory, tmp_path):
     client = client_for(session_factory, tmp_path, 1)
     assert client.get("/api/v1/no-such-route").status_code == 404
     assert client.get("/api/v1/no-such-route").status_code == 404
+
+
+def test_post_rate_limit_keys_by_client_ip_not_forwarded_leftmost_spoof(session_factory, tmp_path):
+    """非受信直连忽略伪造 XFF：预算按对端 IP；失败鉴权也计次。"""
+    client = TestClient(
+        _settings_app(session_factory, tmp_path, 1),
+        base_url="http://127.0.0.1:8000",
+        client=("203.0.113.50", 55000),
+    )
+    spoof = {"X-Forwarded-For": "1.2.3.4"}
+    # 非回环 → 无本地写权限，先计限流再 403
+    assert client.post("/api/v1/no-such-route", headers=spoof).status_code == 403
+    assert client.post("/api/v1/no-such-route", headers=spoof).status_code == 429
+
+
+def _settings_app(factory, tmp_path, per_minute, **extra):
+    from lottolab.app import create_app
+
+    settings = Settings(
+        _env_file=None,
+        data_dir=tmp_path,
+        allow_local_writes=True,
+        allowed_hosts="127.0.0.1,testserver",
+        admin_token="test-only-token-32-characters-ok",
+        rate_limit_posts_per_minute=per_minute,
+        **extra,
+    )
+    return create_app(settings, factory)
 
 
 def test_limiter_unit_slides_window():

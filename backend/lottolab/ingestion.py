@@ -53,8 +53,12 @@ def parse_csv(raw: bytes) -> list[dict]:
             parsed = {
                 "issue": row["issue"],
                 "draw_date": row["draw_date"],
-                "main_numbers": [int(v) for v in re.split(r"[,;\s]+", row["main_numbers"].strip())],
-                "special_numbers": [int(v) for v in re.split(r"[,;\s]+", row["special_numbers"].strip())],
+                "main_numbers": [
+                    int(v) for v in re.split(r"[,;\s]+", row["main_numbers"].strip()) if v.strip()
+                ],
+                "special_numbers": [
+                    int(v) for v in re.split(r"[,;\s]+", row["special_numbers"].strip()) if v.strip()
+                ],
             }
             for key in ("lottery", "dataset_kind", "sales", "pool_amount"):
                 if row.get(key):

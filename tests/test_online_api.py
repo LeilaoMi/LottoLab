@@ -13,7 +13,7 @@ def client_for(factory, tmp_path):
         data_dir=tmp_path,
         allow_local_writes=True,
         allowed_hosts="127.0.0.1,testserver",
-        admin_token="test-only-token",
+        admin_token="test-only-token-32-characters-ok",
     )
     return TestClient(
         create_app(settings, factory), base_url="http://127.0.0.1:8000", client=("127.0.0.1", 55000)

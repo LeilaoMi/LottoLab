@@ -247,7 +247,7 @@ export function CoverPage() {
           <label>
             主区目标命中
             <select value={target} onChange={(e) => setTarget(Number(e.target.value))}>
-              {Array.from({ length: chosen }, (_, i) => i + 1).map((n) => (
+              {Array.from({ length: Math.min(chosen, 6) }, (_, i) => i + 1).map((n) => (
                 <option value={n} key={n}>
                   至少 {n} 个
                 </option>

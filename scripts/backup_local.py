@@ -22,7 +22,7 @@ database = Path(url.database).resolve()
 if not database.is_file():
     raise SystemExit("The local database does not exist; no backup created.")
 target = root / ".local" / "backups" / datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-target.mkdir(parents=True, exist_ok=False)
+target.mkdir(parents=True, exist_ok=False, mode=0o700)
 with (
     closing(sqlite3.connect(database)) as source,
     closing(sqlite3.connect(target / "lottolab.db")) as destination,

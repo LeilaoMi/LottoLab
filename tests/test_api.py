@@ -14,7 +14,7 @@ def client_for(factory, tmp_path, *, local=True, host="127.0.0.1"):
         data_dir=tmp_path,
         allow_local_writes=local,
         allowed_hosts="127.0.0.1,testserver",
-        admin_token="test-only-token",
+        admin_token="test-only-token-32-characters-ok",
     )
     app = create_app(settings, factory)
     return TestClient(app, base_url="http://127.0.0.1:8000", client=(host, 55000)), settings
@@ -30,7 +30,9 @@ def test_authentication_origin_and_forwarded_ip(session_factory, tmp_path):
     )
     assert (
         client.post(
-            "/api/v1/simulations", json=body, headers={"X-Admin-Token": "test-only-token"}
+            "/api/v1/simulations",
+            json=body,
+            headers={"X-Admin-Token": "test-only-token-32-characters-ok"},
         ).status_code
         == 202
     )

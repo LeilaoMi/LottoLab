@@ -264,7 +264,8 @@ def run_backtest(
                 "special_hits",
             )
         }
-        metrics["precision_at_k"] = metrics["main_hits"] / rule.main_count
+        ticket_k = 10 if rule.code == "kl8" else rule.main_count
+        metrics["precision_at_k"] = metrics["main_hits"] / ticket_k
         metrics["recall_at_k"] = metrics["main_hits"] / rule.main_count
         metrics["special_exact_hit_rate"] = float(
             np.mean([row["special_hits"] == rule.special_count for row in records])

@@ -64,3 +64,17 @@ def test_csv_parsing_preserves_bad_rows_for_audit():
     assert "_parse_error" in rows[1]
     with pytest.raises(ValueError):
         parse_csv(b"wrong,header\n1,2")
+
+
+def test_csv_empty_special_column_is_accepted():
+    """数字型等无附加区彩种：special_numbers 留空不应整行解析失败。"""
+    csv = (
+        "issue,draw_date,main_numbers,special_numbers\n"
+        "2026246,2026-09-13,1 2 3,\n"
+        "2026245,2026-09-12,04 05 06,\n"
+    )
+    rows = parse_csv(csv.encode())
+    assert rows[0]["special_numbers"] == []
+    assert "_parse_error" not in rows[0]
+    assert rows[1]["main_numbers"] == [4, 5, 6]
+    assert "_parse_error" not in rows[1]

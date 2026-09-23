@@ -59,7 +59,6 @@ def _curl(url: str, referer: str) -> str:
     r = subprocess.run(  # noqa: S603
         [
             "curl",
-            "--ssl-no-revoke",
             "--max-time",
             "60",
             "-A",
@@ -82,11 +81,11 @@ def _num(x: str) -> int:
 
 
 def from_17500(kind: str) -> dict[str, tuple[int, int | None]]:
-    """返回 issue → (sales, n1或None)。"""
+    """返回 issue → (sales, n1或None)。HTTPS 空响应即失败，不回退明文。"""
     sales_i, n1_i = IDX[kind]
     txt = _curl(f"https://data.17500.cn/{TXT[kind]}", "http://www.17500.cn/")
     if not any(ln.split() for ln in txt.splitlines()):
-        txt = _curl(f"http://data.17500.cn/{TXT[kind]}", "http://www.17500.cn/")
+        raise RuntimeError(f"17500 HTTPS 源为空：{kind}")
     out: dict[str, tuple[int, int | None]] = {}
     for ln in txt.splitlines():
         t = ln.split()

@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,9 +27,17 @@ class Settings(BaseSettings):
     max_active_jobs: int = Field(default=8, ge=1, le=8)
     max_csv_bytes: int = Field(default=8 * 1024 * 1024, ge=1024, le=8 * 1024 * 1024)
     rate_limit_posts_per_minute: int = Field(default=120, ge=0, le=6000)
+    rate_limit_heavy_gets_per_minute: int = Field(default=60, ge=0, le=6000)
     trusted_proxies: str = (
         ""  # extra proxy IPs allowed to set X-Forwarded-For; loopback/private always trusted
     )
+
+    @model_validator(mode="after")
+    def admin_token_strength(self) -> "Settings":
+        # Local tests may pass short tokens with allow_local_writes; enforce only for real write auth.
+        if self.admin_token and len(self.admin_token) < 32 and not self.allow_local_writes:
+            raise ValueError("LOTTOLAB_ADMIN_TOKEN 已设置但不足 32 字符；请加长或删除以启用公开写")
+        return self
 
     @property
     def origins(self) -> list[str]:

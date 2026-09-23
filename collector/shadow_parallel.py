@@ -29,7 +29,7 @@ SOURCES = {
             "https://datachart.500.com/ssq/history/newinc/history.php?limit=8&sort=0",
             lambda t: P.parse_500(t, "ssq"),
         ),
-        ("17500", "http://data.17500.cn/ssq_asc.txt", lambda t: P.parse_17500(t, "ssq", 6, 1)),
+        ("17500", "https://data.17500.cn/ssq_asc.txt", lambda t: P.parse_17500(t, "ssq", 6, 1)),
     ],  # 红6+蓝1；cwl 在 GH 美区常不可达时仍有 500+17500 双源
     "dlt": [
         (
@@ -37,7 +37,7 @@ SOURCES = {
             "https://datachart.500.com/dlt/history/newinc/history.php?limit=8&sort=0",
             lambda t: P.parse_500(t, "dlt"),
         ),
-        ("17500", "http://data.17500.cn/dlt_asc.txt", lambda t: P.parse_17500(t, "dlt", 5, 2)),
+        ("17500", "https://data.17500.cn/dlt_asc.txt", lambda t: P.parse_17500(t, "dlt", 5, 2)),
         (
             "sporttery",
             "https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry?gameNo=85&provinceId=0&pageSize=8&isVerify=1&pageNo=1",
@@ -51,7 +51,7 @@ SOURCES = {
             "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name=3d&issueCount=8",
             lambda t: P.parse_cwl(t, "fc3d"),
         ),
-        ("17500", "http://data.17500.cn/3d_asc.txt", lambda t: P.parse_17500(t, "fc3d", 3, 0)),
+        ("17500", "https://data.17500.cn/3d_asc.txt", lambda t: P.parse_17500(t, "fc3d", 3, 0)),
     ],
     "pl3": [
         (
@@ -59,7 +59,7 @@ SOURCES = {
             "https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry?gameNo=35&provinceId=0&pageSize=8&isVerify=1&pageNo=1",
             lambda t: P.parse_sporttery(t, "pl3"),
         ),
-        ("17500", "http://data.17500.cn/pl3_asc.txt", lambda t: P.parse_17500(t, "pl3", 3, 0)),
+        ("17500", "https://data.17500.cn/pl3_asc.txt", lambda t: P.parse_17500(t, "pl3", 3, 0)),
     ],
     "pl5": [
         (
@@ -67,7 +67,7 @@ SOURCES = {
             "https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry?gameNo=350133&provinceId=0&pageSize=8&isVerify=1&pageNo=1",
             lambda t: P.parse_sporttery(t, "pl5"),
         ),
-        ("17500", "http://data.17500.cn/pl5_asc.txt", lambda t: P.parse_17500(t, "pl5", 5, 0)),
+        ("17500", "https://data.17500.cn/pl5_asc.txt", lambda t: P.parse_17500(t, "pl5", 5, 0)),
     ],
     "qlc": [
         (
@@ -75,7 +75,7 @@ SOURCES = {
             "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name=qlc&issueCount=8",
             lambda t: P.parse_cwl(t, "qlc"),
         ),
-        ("17500", "http://data.17500.cn/7lc_asc.txt", lambda t: P.parse_17500(t, "qlc", 7, 1)),
+        ("17500", "https://data.17500.cn/7lc_asc.txt", lambda t: P.parse_17500(t, "qlc", 7, 1)),
     ],
     "qxc": [
         (
@@ -83,7 +83,7 @@ SOURCES = {
             "https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry?gameNo=04&provinceId=0&pageSize=8&isVerify=1&pageNo=1",
             lambda t: P.parse_sporttery(t, "qxc"),
         ),
-        ("17500", "http://data.17500.cn/7xc_asc.txt", lambda t: P.parse_17500(t, "qxc", 7, 0)),
+        ("17500", "https://data.17500.cn/7xc_asc.txt", lambda t: P.parse_17500(t, "qxc", 7, 0)),
     ],  # 5 位期号
     "kl8": [
         (
@@ -91,7 +91,7 @@ SOURCES = {
             "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice?name=kl8&issueCount=8",
             lambda t: P.parse_cwl(t, "kl8"),
         ),
-        ("17500", "http://data.17500.cn/kl8_asc.txt", lambda t: P.parse_17500(t, "kl8", 20, 0)),
+        ("17500", "https://data.17500.cn/kl8_asc.txt", lambda t: P.parse_17500(t, "kl8", 20, 0)),
     ],
 }
 
@@ -100,7 +100,7 @@ REFERERS = {"sporttery": "https://static.sporttery.cn/"}  # 体彩官方 webapi 
 
 
 def get(url, referer=None):
-    cmd = ["curl", "--ssl-no-revoke", "--max-time", "60", "-A", UA, "-s"]
+    cmd = ["curl", "--max-time", "60", "-A", UA, "-s"]
     if referer:
         cmd += ["-e", referer]
     cmd.append(url)

@@ -42,9 +42,10 @@ const navigation = [
 
 export function App() {
   const [route, setRoute] = useState(window.location.hash.slice(2) || 'overview')
-  const [lottery, setLottery] = useState<Lottery>(() =>
-    localStorage.getItem('lottolab-lottery') === 'dlt' ? 'dlt' : 'ssq',
-  )
+  const [lottery, setLottery] = useState<Lottery>(() => {
+    const stored = localStorage.getItem('lottolab-lottery')
+    return stored && stored in LOTTERY_NAME ? (stored as Lottery) : 'ssq'
+  })
   const [datasetKind, setDatasetKind] = useState<DatasetKind>('real')
   const [version, setVersion] = useState(0)
   const [mobile, setMobile] = useState(false)
@@ -409,7 +410,7 @@ function ImportDialog({
         <div className="csv-guide">
           <strong>必要列</strong>
           <code>issue,draw_date,main_numbers,special_numbers</code>
-          <p>号码之间使用空格；真实期号如 2026105，日期如 2026-09-10。</p>
+          <p>号码之间使用空格；无附加区的彩种该列留空；真实期号如 2026105，日期如 2026-09-10。</p>
         </div>
         <ErrorNote message={error} />
         {result && (
