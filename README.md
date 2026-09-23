@@ -73,7 +73,7 @@
 | :--- | :--- |
 | 双色球 台账 / 已对账 | 21 条 / 14 条 |
 | 双色球 平均命中（主区） | 1.000（随机期望 1.091） |
-| 大乐透 台账 / 已对账 | 21 条 / 14 条 |
+| 大乐透 台账 / 已对账 | 28 条 / 14 条 |
 | 大乐透 平均命中（主区） | 1.000（随机期望 0.714） |
 | 中奖 | 5 次（双色球 2、大乐透 3） |
 
@@ -88,7 +88,7 @@ flowchart LR
   end
   subgraph Edge["入口"]
     CF["Cloudflare<br/>DNS + POST 限流"]
-    API["FastAPI<br/>GET 公开读 / POST 鉴权<br/>120 次/分/IP"]
+    API["FastAPI<br/>GET 公开读 / POST 鉴权<br/>POST 120 · 重算GET 60 次/分/IP"]
   end
   subgraph Compute["计算"]
     W["独立 worker<br/>顺序执行 · 8 项/600秒"]
@@ -154,7 +154,7 @@ docker compose up -d --build --wait
 
 ## 质量门禁
 
-每次推送与 PR 自动运行三条流水：后端（PostgreSQL 17 真库回归）、浏览器（Playwright 本地与云端两种模式）、容器（构建→灌数据→重建→校验数据与快照保留）。后端门禁为 `pip check`、Ruff 检查与格式、`mypy`、192 项 pytest（需 PostgreSQL 的 2 项在 CI 真库跑）；前端门禁为 Prettier 与构建。文档改动需核对命令、链接与真实渲染。
+每次推送与 PR 自动运行三条流水：后端（PostgreSQL 17 真库回归）、浏览器（Playwright 本地与云端两种模式）、容器（构建→灌数据→重建→校验数据与快照保留）。后端门禁为 `pip check`、Ruff 检查与格式、`mypy`、201 项 pytest（需 PostgreSQL 的 2 项在 CI 真库跑）；前端门禁为 Prettier 与构建。文档改动需核对命令、链接与真实渲染。
 
 ## 文档导航
 
