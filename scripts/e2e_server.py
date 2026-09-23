@@ -21,7 +21,7 @@ env.update(
         "LOTTOLAB_DATABASE_URL": f"sqlite:///{(RUN / 'test.db').as_posix()}",
         "LOTTOLAB_DATA_DIR": str(RUN),
         "LOTTOLAB_ALLOW_LOCAL_WRITES": "false" if cloud else "true",
-        "LOTTOLAB_ADMIN_TOKEN": "isolated-e2e-test-token",
+        "LOTTOLAB_ADMIN_TOKEN": "isolated-e2e-test-token-32-chars-ok",
         "LOTTOLAB_ALLOWED_ORIGINS": f"http://127.0.0.1:{port},http://localhost:{port}",
         "LOTTOLAB_ALLOWED_HOSTS": "127.0.0.1,localhost",
         "LOTTOLAB_EXECUTION_MODE": "request" if cloud else "worker",

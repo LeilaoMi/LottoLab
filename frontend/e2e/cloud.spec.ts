@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-const token = 'isolated-e2e-test-token'
+const token = 'isolated-e2e-test-token-32-chars-ok'
 
 test('private cloud entry, request compute and persistent history without a worker', async ({
   page,
