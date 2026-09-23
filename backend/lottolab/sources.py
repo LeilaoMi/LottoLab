@@ -4,14 +4,42 @@ import json
 import re
 import time
 from dataclasses import dataclass
+from typing import Any, Literal, TypedDict
 
 import httpx
 from bs4 import BeautifulSoup
 
-from .domain import Lottery
+from .domain import RULES, Lottery
 
 CWL_URL = "https://www.cwl.gov.cn/cwl_admin/front/cwlkj/search/kjxx/findDrawNotice"
 TC_URL = "https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry"
+
+CWL_NAMES: dict[Lottery, str] = {"ssq": "ssq", "qlc": "qlc", "kl8": "kl8", "fc3d": "3d"}
+SPORTTERY_GAMES: dict[Lottery, str] = {"dlt": "85", "pl3": "35", "pl5": "350133", "qxc": "04"}
+
+
+class SourceRoute(TypedDict):
+    provider: Literal["cwl", "sporttery"]
+    ident: str
+    url: str
+    source_label: str
+
+
+def source_route(lottery: Lottery) -> SourceRoute:
+    """Official history endpoint for each lottery (no more gameNo=85 for everything)."""
+    if lottery in CWL_NAMES:
+        return {
+            "provider": "cwl",
+            "ident": CWL_NAMES[lottery],
+            "url": CWL_URL,
+            "source_label": "中国福彩",
+        }
+    return {
+        "provider": "sporttery",
+        "ident": SPORTTERY_GAMES[lottery],
+        "url": TC_URL,
+        "source_label": "中国体彩",
+    }
 
 
 @dataclass
@@ -28,18 +56,36 @@ def money(value) -> str | None:
     return text if re.fullmatch(r"\d+(\.\d{1,2})?", text) else None
 
 
-def parse_cwl(payload: dict) -> list[dict]:
-    if payload.get("state") != 0 or not isinstance(payload.get("result"), list):
+def _split_numbers(text: str) -> list[int]:
+    parts = re.split(r"[,\s]+", (text or "").strip())
+    out: list[int] = []
+    for part in parts:
+        if not part:
+            continue
+        out.append(int(part))
+    return out
+
+
+def parse_cwl(payload: dict, lottery: Lottery = "ssq") -> list[dict]:
+    if payload.get("state") != 0 and payload.get("state") is not None:
         raise ValueError("中国福彩返回了无法识别的数据结构")
+    if not isinstance(payload.get("result"), list):
+        raise ValueError("中国福彩返回了无法识别的数据结构")
+    rule = RULES[lottery]
     rows: list[dict] = []
     for item in payload["result"]:
         try:
+            main = _split_numbers(str(item.get("red", "")))
+            special: list[int] = []
+            if rule.family == "POOL" and rule.special_count:
+                blue = str(item.get("blue") or "").strip()
+                special = [int(blue)] if blue else []
             rows.append(
                 {
                     "issue": str(item["code"]),
                     "draw_date": str(item["date"])[:10],
-                    "main_numbers": [int(v) for v in item["red"].split(",")],
-                    "special_numbers": [int(item["blue"])],
+                    "main_numbers": main,
+                    "special_numbers": special,
                     "sales": money(item.get("sales")),
                     "pool_amount": money(item.get("poolmoney")),
                     "prizes": {
@@ -86,23 +132,30 @@ def parse_500(html: str, lottery: Lottery) -> list[dict]:
     return rows
 
 
-def parse_sporttery(payload: dict) -> list[dict]:
+def parse_sporttery(payload: dict, lottery: Lottery = "dlt") -> list[dict]:
     value = payload.get("value", {})
     items = value.get("list")
     if not isinstance(items, list):
         raise ValueError("中国体彩返回了无法识别的数据结构")
+    rule = RULES[lottery]
     rows: list[dict] = []
     for item in items:
         try:
-            numbers = [int(v) for v in re.split(r"[,\s]+", item["lotteryDrawResult"].strip())]
+            numbers = _split_numbers(str(item.get("lotteryDrawResult", "")))
             issue = str(item["lotteryDrawNum"])
             issue = "20" + issue if len(issue) == 5 else issue
+            main_count = rule.main_count
+            if rule.family == "DIGIT":
+                main, special = numbers[:main_count], []
+            else:
+                main = numbers[:main_count]
+                special = numbers[main_count : main_count + rule.special_count]
             rows.append(
                 {
                     "issue": issue,
                     "draw_date": item["lotteryDrawTime"][:10],
-                    "main_numbers": numbers[:5],
-                    "special_numbers": numbers[5:7],
+                    "main_numbers": main,
+                    "special_numbers": special,
                     "sales": money(item.get("totalSaleAmount")),
                     "pool_amount": money(item.get("poolBalanceAfterdraw")),
                 }
@@ -132,40 +185,53 @@ def request(client: httpx.Client, url: str, params: dict) -> httpx.Response:
 
 def fetch_source(lottery: Lottery, count: int, timeout: float = 20) -> tuple[list[SourceBatch], list[str]]:
     errors: list[str] = []
+    route = source_route(lottery)
+    headers = {
+        "User-Agent": "LottoLab/0.1 (public historical data research)",
+        "Referer": (
+            "https://static.sporttery.cn/"
+            if route["provider"] == "sporttery"
+            else "https://www.cwl.gov.cn/ygkj/wqkjgg/ssq/"
+        ),
+    }
     with httpx.Client(
         timeout=timeout,
         follow_redirects=False,
-        headers={
-            "User-Agent": "LottoLab/0.1 (public historical data research)",
-            "Referer": "https://www.cwl.gov.cn/ygkj/wqkjgg/ssq/",
-        },
+        headers=headers,
     ) as client:
         batches = []
         try:
             remaining = count
             page = 1
             while remaining > 0:
-                size = min(1000, count) if lottery == "ssq" else min(100, count)
-                url = CWL_URL if lottery == "ssq" else TC_URL
-                params = (
-                    {"name": "ssq", "pageNo": page, "pageSize": size, "systemType": "PC"}
-                    if lottery == "ssq"
-                    else {
-                        "gameNo": "85",
+                size = min(1000, count) if route["provider"] == "cwl" else min(100, count)
+                if route["provider"] == "cwl":
+                    params: dict[str, Any] = {
+                        "name": route["ident"],
+                        "pageNo": page,
+                        "pageSize": size,
+                        "systemType": "PC",
+                    }
+                else:
+                    params = {
+                        "gameNo": route["ident"],
                         "provinceId": "0",
                         "pageSize": size,
                         "pageNo": page,
                         "isVerify": "1",
                     }
-                )
-                response = request(client, url, params)
+                response = request(client, route["url"], params)
                 payload = response.json()
-                records = parse_cwl(payload) if lottery == "ssq" else parse_sporttery(payload)
+                records = (
+                    parse_cwl(payload, lottery)
+                    if route["provider"] == "cwl"
+                    else parse_sporttery(payload, lottery)
+                )
                 if not records:
                     break
                 batches.append(
                     SourceBatch(
-                        "中国福彩" if lottery == "ssq" else "中国体彩",
+                        route["source_label"],
                         str(response.url),
                         response.content,
                         records[:remaining],
@@ -182,7 +248,9 @@ def fetch_source(lottery: Lottery, count: int, timeout: float = 20) -> tuple[lis
                 return batches, errors
             raise ValueError("官方源返回空数据")
         except (RuntimeError, ValueError, KeyError, TypeError, json.JSONDecodeError):
-            errors.append("官方数据源暂不可用，已尝试备用来源；可通过导入报告查看实际来源。")
+            errors.append("官方数据源暂不可用；可通过导入报告查看实际来源或改用 CSV 导入。")
+        if lottery not in ("ssq", "dlt"):
+            raise RuntimeError("该彩种官方源暂不可用，且无备用 HTML 源；请稍后重试或导入 CSV") from None
         url = f"https://datachart.500.com/{lottery}/history/newinc/history.php"
         response = request(client, url, {"limit": count})
         html = response.content.decode("utf-8", errors="replace")

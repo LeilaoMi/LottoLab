@@ -162,9 +162,14 @@ export function SimulationPage() {
 
 export function CoverPage() {
   const workspace = useWorkspace()
-  const maximum = workspace.lottery === 'ssq' ? 33 : 35
-  const chosen = workspace.lottery === 'ssq' ? 6 : 5
-  const [pool, setPool] = useState([1, 3, 5, 7, 9, 12, 15, 18, 22, 25, 29, 33])
+  const coverRule =
+    workspace.lottery === 'ssq'
+      ? { maximum: 33, chosen: 6, initial: [1, 3, 5, 7, 9, 12, 15, 18, 22, 25, 29, 33] }
+      : workspace.lottery === 'qlc'
+        ? { maximum: 30, chosen: 7, initial: [1, 3, 5, 7, 9, 12, 15, 18, 22, 25, 28, 30] }
+        : { maximum: 35, chosen: 5, initial: [1, 3, 5, 7, 9, 12, 15, 18, 22, 25, 29, 33] }
+  const { maximum, chosen, initial } = coverRule
+  const [pool, setPool] = useState(initial)
   const [count, setCount] = useState(10)
   const [target, setTarget] = useState(3)
   const [seed, setSeed] = useState(2026)

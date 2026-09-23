@@ -74,7 +74,8 @@ python scripts/migrate_cloud.py --apply
 | 环境变量 | 用途 |
 | :--- | :--- |
 | `LOTTOLAB_DATABASE_URL` | 必需，外部 PostgreSQL pooled 连接，启用 TLS |
-| `LOTTOLAB_ADMIN_TOKEN` | 可选：不设则云端公开读写；设为至少 32 字符随机串则切为公开读、私有写（查询/推荐/验奖GET免令牌，同步/导入/回测等POST需令牌） |
+| `LOTTOLAB_ADMIN_TOKEN` | 可选：不设则云端公开读写；设为至少 32 字符随机串则切为公开读、私有写（查询/推荐/验奖GET免令牌，同步/导入/回测等POST需令牌）。已设置但不足 32 字符会在启动时失败 |
+| `LOTTOLAB_TRUSTED_PROXIES` | 可选：允许写入 `X-Forwarded-For` 的代理 IP/CIDR（逗号分隔）。回环与内网默认受信；生产建议加入 Cloudflare/Vercel 边缘地址，否则限流按直连对端 IP 计 |
 | `LOTTOLAB_JOB_TIMEOUT_SECONDS` | 可选，默认 240，允许 1–240 |
 | `LOTTOLAB_ALLOWED_HOSTS` | 可选，附加自定义域名，逗号分隔，不含协议、路径或端口 |
 | `LOTTOLAB_ALLOWED_ORIGINS` | 可选，附加完整 HTTPS 来源，通常无需设置 |
@@ -125,7 +126,7 @@ python scripts/vercel_cli.py deploy --target preview
 | CSV 行数 | 10,000 | 10,000 |
 | 原始快照 | 文件系统 | 压缩存入 PostgreSQL |
 | 数据访问 | 默认可读，写入规则由配置决定 | 未设令牌时公开读写；设令牌后公开读、私有写（验奖用GET免令牌） |
-| 写请求限流 | POST /api/* 默认 120 次/分/IP（`LOTTOLAB_RATE_LIMIT_POSTS_PER_MINUTE`，0 关闭） | 同左 |
+| 写请求限流 | POST /api/* 默认 120 次/分/IP（`LOTTOLAB_RATE_LIMIT_POSTS_PER_MINUTE`，0 关闭；XFF 仅受信代理生效） | 同左 |
 
 云端无需常驻 worker。浏览器连接或函数运行被中断时，任务可能失败；重新鉴权后查看历史状态，不要假定断开的请求仍会完成。空闲数据库或函数唤醒可能增加首次响应时间。
 

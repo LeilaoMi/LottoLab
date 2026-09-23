@@ -96,10 +96,9 @@ def test_cloud_config_switches_to_private_write_with_admin_token(monkeypatch, tm
     assert settings.max_active_jobs == 1
 
 
-def test_cloud_config_ignores_short_admin_token():
-    settings = vercel_settings({**cloud_env(), "LOTTOLAB_ADMIN_TOKEN": "too-short"})
-    assert settings.public_mode
-    assert settings.admin_token == ""
+def test_cloud_config_rejects_short_admin_token():
+    with pytest.raises(ValueError, match="不足 32"):
+        vercel_settings({**cloud_env(), "LOTTOLAB_ADMIN_TOKEN": "too-short"})
 
 
 @pytest.mark.parametrize(

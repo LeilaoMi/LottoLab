@@ -30,8 +30,9 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 
 
 
 def fetch(url: str) -> str:
+    # 不关闭 TLS 校验（去掉 -k）；data.17500.cn 若仅 HTTP 可达则按原样请求
     r = subprocess.run(
-        ["curl", "-k", "--ssl-no-revoke", "--max-time", "60", "-A", UA, "-s", url],
+        ["curl", "--ssl-no-revoke", "--max-time", "60", "-A", UA, "-s", url],
         capture_output=True,
         text=True,
         timeout=75,
@@ -41,8 +42,11 @@ def fetch(url: str) -> str:
 
 def build(kind: str):
     fn, mc, sc = SRC[kind]
-    url = f"http://data.17500.cn/{fn}"
+    url = f"https://data.17500.cn/{fn}"
     txt = fetch(url)
+    if not txt.strip():
+        url = f"http://data.17500.cn/{fn}"
+        txt = fetch(url)
     recs = P.parse_17500(txt, kind, mc, sc)
     out = [
         {

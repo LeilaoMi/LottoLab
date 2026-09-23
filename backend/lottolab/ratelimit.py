@@ -3,8 +3,13 @@
 Cloudflare /reverse-proxy limits stay primary; this guard also protects
 self-hosted deployments. State is per process: on serverless platforms each
 instance keeps its own budget, so treat this as a backstop, not a quota.
+
+X-Forwarded-For is only trusted when the TCP peer is a trusted proxy
+(loopback / private / LOTTOLAB_TRUSTED_PROXIES). Direct clients cannot
+rotate a spoofed XFF to bypass the limiter.
 """
 
+import ipaddress
 import time
 from collections import deque
 from threading import Lock
@@ -36,9 +41,27 @@ class PostRateLimiter:
             return True
 
 
-def client_ip(request: Request) -> str:
-    """Best-effort client key: leftmost X-Forwarded-For, else the peer address."""
+def _is_proxy_hop(ip: str, trusted: list[str]) -> bool:
+    if ip in trusted:
+        return True
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return addr.is_loopback or addr.is_private or addr.is_link_local
+
+
+def client_ip(request: Request, trusted_proxies: list[str] | None = None) -> str:
+    """Client key: peer address, or rightmost untrusted XFF hop if peer is a trusted proxy."""
+    peer = request.client.host if request.client else "unknown"
+    trusted = trusted_proxies or []
+    if not _is_proxy_hop(peer, trusted):
+        return peer
     forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded.strip():
-        return forwarded.split(",")[0].strip() or "unknown"
-    return request.client.host if request.client else "unknown"
+    parts = [p.strip() for p in forwarded.split(",") if p.strip()]
+    for ip in reversed(parts):
+        if not _is_proxy_hop(ip, trusted):
+            return ip
+    if parts:
+        return parts[0]
+    return peer

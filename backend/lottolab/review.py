@@ -46,6 +46,13 @@ def _score(kind: str, pred: PredictionLog, draw: Draw) -> tuple[int, int, str | 
         hit = sum(1 for i in range(len(dm)) if i < len(pm) and pm[i] == dm[i])
         prize = "全中" if hit == len(dm) else (f"中{hit}位" if hit else None)
         return hit, 0, prize
+    if kind == "qlc":
+        # 票面 7 基本号；特别号 = 开奖第 8 号，命中 = 特别号 ∈ 票面（与 verify.score_ticket 一致）
+        special = draw.special_numbers[0] if draw.special_numbers else None
+        hit_special = 1 if special is not None and special in set(pred.main_numbers) else 0
+        hit_main = len(set(pred.main_numbers) & set(draw.main_numbers))
+        tier = qlc_prize_tier(hit_main, hit_special)
+        return hit_main, hit_special, tier
     hit_main = len(set(pred.main_numbers) & set(draw.main_numbers))
     hit_special = len(set(pred.special_numbers) & set(draw.special_numbers))
     if kind == "kl8":
@@ -128,9 +135,17 @@ def review_summary(session: Session, kind: str, limit: int = 50) -> dict[str, An
     rule = RULES[cast("Lottery", kind)]
     n = len(checked)
     avg_hit = round(sum(int(r.hit_main or 0) for r in checked) / n, 3) if n else None
-    expected = (
-        (rule.main_count * rule.main_count / rule.main_max) if rule.family == "POOL" else rule.main_count / 10
-    )
+    # 期望命中按**实际票面大小**计算：POOL 为 k*k/池；DIGIT 为各位均匀命中概率之和。
+    sized = [len(r.main_numbers) for r in rows if r.main_numbers] or [rule.main_count]
+    if rule.family == "POOL":
+        # 期望 = 票面 k × 开奖球数 D / 池 N（双色球 k=D 时为 k²/N）
+        expected = sum(k * rule.main_count for k in sized) / len(sized) / rule.main_max
+    else:
+        ranges = [
+            rule.last_max if (rule.last_max is not None and i == rule.main_count - 1) else rule.main_max
+            for i in range(rule.main_count)
+        ]
+        expected = sum(1.0 / (hi + 1) for hi in ranges)
     won = sum(1 for r in checked if r.prize)
     return {
         "kind": kind,

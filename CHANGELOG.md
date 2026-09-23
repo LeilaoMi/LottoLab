@@ -4,6 +4,14 @@
 
 ## [未发布]
 
+- **多源采集修复**：同步按彩种路由官方接口（福彩 cwl `name=` / 体彩 `gameNo=`，不再 8 彩种全部 gameNo=85）；快乐8/福彩3D/排列三五/七星彩 影子作业补上第二源交叉；sporttery 需带站内 Referer。
+- **在线工具注数**：七乐彩用 `main`、快乐8 用 `pick/nums`、数字型按位 `pos` 下发；组合覆盖对七乐彩按 7/30 规则取候选池（原误用 5/35）。
+- **复盘 GET 只读**：`GET /predictions/review` 默认不写库，显式 `reconcile=true` 才对账（在线工具按钮传参）。
+- **快乐8 期望命中**：票面 k=10、期望 = k×开奖球数/池，复盘/回测与推荐规则对齐（原误按 k=5/k² 退化）。
+- **七乐彩评分**：复盘对账将特别号视为基本区命中（与验奖口径一致）。
+- **随机建议公平性**：推荐破平局消费 seeded RNG，区间覆盖/附加区加确定性抖动，避免同种子总是同票。
+- **样本外闸门**：冷门度流行度学习（含数字型）仅在 70/30 验证段与训练符号一致时通过，否则 fail-closed。
+- **安全加固**：管理员令牌已设置时长度不足 32 直接启动失败；`X-Forwarded-For` 仅受信代理链生效（`LOTTOLAB_TRUSTED_PROXIES`）；缺 `Content-Length` 的 POST 拒绝；worker 错误信息脱敏；采集脚本去掉 `curl -k`、17500 优先 https；空源/分歧作业非零退出；GitHub Actions 加 concurrency、钉 `psycopg[binary]`。
 - **回测稳定性对照**：测试窗前后半平均优势对照（CONSISTENT / INCONSISTENT / TOO_SHORT），纯描述性，不做检验、不参与 verdict；回测页新增对照列。
 - **回测报告脚本**：`python scripts/export_report.py 报告.json` 把 JSON 导出渲染为 Markdown 摘要（打到控制台，自存 `.local/`，不进仓库）。
 

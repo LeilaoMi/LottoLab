@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api, useResource } from '../api'
+import type { Lottery } from '../api'
 import { ErrorNote, Loading } from '../components'
 import { useWorkspace } from '../Workspace'
 
@@ -118,8 +119,13 @@ export function OnlinePage() {
   const [seed, setSeed] = useState(1)
   const recommend = useResource<RecommendResult>(`/recommend?kind=${lottery}&seed=${seed}`, version)
 
-  const [mainCount, setMainCount] = useState(lottery === 'ssq' ? 7 : 6)
-  const [auxCount, setAuxCount] = useState(lottery === 'ssq' ? 1 : 3)
+  const DIGIT_KINDS: Lottery[] = ['fc3d', 'pl3', 'pl5', 'qxc']
+  const digitNeed = lottery === 'pl5' ? 5 : lottery === 'qxc' ? 7 : 3
+  const isDigit = DIGIT_KINDS.includes(lottery)
+  const [pos, setPos] = useState<number[]>(Array.from({ length: digitNeed }, () => 1))
+  const [klPick, setKlPick] = useState(10)
+  const [mainCount, setMainCount] = useState(lottery === 'ssq' ? 7 : lottery === 'qlc' ? 7 : 6)
+  const [auxCount, setAuxCount] = useState(lottery === 'ssq' ? 1 : lottery === 'qlc' ? 1 : 3)
   const [betMode, setBetMode] = useState<'duplex' | 'dantuo'>('duplex')
   const [danCount, setDanCount] = useState(2)
   const [bet, setBet] = useState<BetResult | null>(null)
@@ -142,6 +148,30 @@ export function OnlinePage() {
 
   async function calcBet() {
     setBetErr('')
+    if (isDigit) {
+      try {
+        setBet(
+          await api<BetResult>(
+            `/bet?kind=${lottery}&p=${encodeURIComponent(JSON.stringify({ pos: pos.join(',') }))}`,
+          ),
+        )
+      } catch (e) {
+        setBetErr(e instanceof Error ? e.message : '计算失败')
+      }
+      return
+    }
+    if (lottery === 'kl8') {
+      try {
+        setBet(
+          await api<BetResult>(
+            `/bet?kind=kl8&p=${encodeURIComponent(JSON.stringify({ pick: klPick, nums: Math.max(klPick, mainCount) }))}`,
+          ),
+        )
+      } catch (e) {
+        setBetErr(e instanceof Error ? e.message : '计算失败')
+      }
+      return
+    }
     let params: Record<string, number>
     if (betMode === 'dantuo') {
       params =
@@ -150,8 +180,12 @@ export function OnlinePage() {
           : lottery === 'dlt'
             ? { fdan: danCount, ftuo: mainCount, btuo: auxCount }
             : { dan: danCount, tuo: mainCount }
+    } else if (lottery === 'ssq') {
+      params = { red: mainCount, blue: auxCount }
+    } else if (lottery === 'qlc') {
+      params = { main: mainCount }
     } else {
-      params = lottery === 'ssq' ? { red: mainCount, blue: auxCount } : { front: mainCount, back: auxCount }
+      params = { front: mainCount, back: auxCount }
     }
     try {
       setBet(await api<BetResult>(`/bet?kind=${lottery}&p=${encodeURIComponent(JSON.stringify(params))}`))
@@ -219,7 +253,7 @@ export function OnlinePage() {
     setPredErr('')
     setReviewLoading(true)
     try {
-      setReview(await api<ReviewSummary>(`/predictions/review?kind=${lottery}`))
+      setReview(await api<ReviewSummary>(`/predictions/review?kind=${lottery}&reconcile=true`))
     } catch (e) {
       setPredErr(e instanceof Error ? e.message : '复盘加载失败')
     } finally {
@@ -376,53 +410,107 @@ export function OnlinePage() {
         <div className="card-head">
           <h2>注数与金额</h2>
         </div>
-        {['ssq', 'dlt', 'qlc'].includes(lottery) && (
-          <div className="segmented" style={{ marginBottom: 8 }}>
-            <button className={betMode === 'duplex' ? 'active' : ''} onClick={() => setBetMode('duplex')}>
-              复式
-            </button>
-            <button className={betMode === 'dantuo' ? 'active' : ''} onClick={() => setBetMode('dantuo')}>
-              胆拖
+        {isDigit ? (
+          <div className="inline-actions">
+            {pos.map((value, index) => (
+              <label className="muted" key={index}>
+                第 {index + 1} 位
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={value}
+                  onChange={(e) => {
+                    const next = [...pos]
+                    next[index] = Number(e.target.value)
+                    setPos(next)
+                  }}
+                />
+              </label>
+            ))}
+            <button className="button button-primary" onClick={() => void calcBet()}>
+              计算
             </button>
           </div>
-        )}
-        <div className="inline-actions">
-          {betMode === 'dantuo' && (
+        ) : lottery === 'kl8' ? (
+          <div className="inline-actions">
             <label className="muted">
-              胆码数
+              选球数
               <input
                 type="number"
                 min={1}
-                max={5}
-                value={danCount}
-                onChange={(e) => setDanCount(+e.target.value)}
+                max={10}
+                value={klPick}
+                onChange={(e) => setKlPick(Number(e.target.value))}
               />
             </label>
-          )}
-          <label className="muted">
-            {betMode === 'dantuo' ? '拖码数' : '主区号码数'}
-            <input
-              type="number"
-              min={5}
-              max={33}
-              value={mainCount}
-              onChange={(e) => setMainCount(+e.target.value)}
-            />
-          </label>
-          <label className="muted">
-            辅区号码数
-            <input
-              type="number"
-              min={1}
-              max={16}
-              value={auxCount}
-              onChange={(e) => setAuxCount(+e.target.value)}
-            />
-          </label>
-          <button className="button button-primary" onClick={() => void calcBet()}>
-            计算
-          </button>
-        </div>
+            <label className="muted">
+              投注号码个数
+              <input
+                type="number"
+                min={klPick}
+                max={80}
+                value={Math.max(klPick, mainCount)}
+                onChange={(e) => setMainCount(Number(e.target.value))}
+              />
+            </label>
+            <button className="button button-primary" onClick={() => void calcBet()}>
+              计算
+            </button>
+          </div>
+        ) : (
+          <>
+            {['ssq', 'dlt', 'qlc'].includes(lottery) && (
+              <div className="segmented" style={{ marginBottom: 8 }}>
+                <button className={betMode === 'duplex' ? 'active' : ''} onClick={() => setBetMode('duplex')}>
+                  复式
+                </button>
+                <button className={betMode === 'dantuo' ? 'active' : ''} onClick={() => setBetMode('dantuo')}>
+                  胆拖
+                </button>
+              </div>
+            )}
+            <div className="inline-actions">
+              {betMode === 'dantuo' && (
+                <label className="muted">
+                  胆码数
+                  <input
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={danCount}
+                    onChange={(e) => setDanCount(+e.target.value)}
+                  />
+                </label>
+              )}
+              <label className="muted">
+                {betMode === 'dantuo' ? '拖码数' : '主区号码数'}
+                <input
+                  type="number"
+                  min={lottery === 'qlc' ? 7 : 5}
+                  max={lottery === 'ssq' ? 33 : lottery === 'qlc' ? 30 : 35}
+                  value={mainCount}
+                  onChange={(e) => setMainCount(+e.target.value)}
+                />
+              </label>
+              {lottery !== 'qlc' && (
+                <label className="muted">
+                  辅区号码数
+                  <input
+                    type="number"
+                    min={1}
+                    max={lottery === 'ssq' ? 16 : 12}
+                    value={auxCount}
+                    onChange={(e) => setAuxCount(+e.target.value)}
+                  />
+                </label>
+              )}
+              <button className="button button-primary" onClick={() => void calcBet()}>
+                计算
+              </button>
+            </div>
+          </>
+        )}
         <ErrorNote message={betErr} />
         {bet && (
           <p>

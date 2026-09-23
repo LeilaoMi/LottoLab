@@ -21,7 +21,7 @@ POOL_SPEC: dict[str, tuple[int, int, int]] = {
     "ssq": (1, 33, 6),
     "dlt": (1, 35, 5),
     "qlc": (1, 30, 7),
-    "kl8": (1, 80, 20),
+    "kl8": (1, 80, 10),  # 推荐票面 10 注（开奖仍为 20/80；见 RULES["kl8"]）
 }
 
 
@@ -256,7 +256,30 @@ def _learn_popularity(kind: str, rows: list[dict[str, Any]]) -> Any:
     lo, mx = float(raw.min()), float(raw.max())
     if mx - lo < 1e-9:
         return None
+    if not _oos_positive(A, b):
+        return None
     return {v + 1: float((raw[v] - lo) / (mx - lo)) for v in range(hi)}
+
+
+def _oos_positive(A: np.ndarray, b: np.ndarray) -> bool:
+    """时序 70/30 样本外：验证段目标有方差且预测-残差相关为正才放行。"""
+    split = max(50, int(len(b) * 0.7))
+    if len(b) - split < 40:
+        return True
+    y_val = b[split:]
+    if float(np.var(y_val)) < 1e-15:
+        return True  # 验证段目标恒定，无法做相关检验
+    try:
+        coef = np.linalg.solve(A[:split].T @ A[:split] + np.eye(A.shape[1]), A[:split].T @ b[:split])
+    except np.linalg.LinAlgError:
+        return False
+    pred = A[split:] @ coef
+    pc = pred - pred.mean()
+    yc = y_val - y_val.mean()
+    denom = math.sqrt(float(np.dot(pc, pc)) * float(np.dot(yc, yc)))
+    if denom <= 0:
+        return True
+    return float(np.dot(pc, yc)) / denom > 0
 
 
 def _learn_popularity_digit(kind: str, rows: list[dict[str, Any]], spec: dict[str, Any]) -> Any:
@@ -299,6 +322,8 @@ def _learn_popularity_digit(kind: str, rows: list[dict[str, Any]], spec: dict[st
     raw = coef[: len(cols)]
     lo, mx = float(raw.min()), float(raw.max())
     if mx - lo < 1e-9:
+        return None
+    if not _oos_positive(A, b):
         return None
     per_pos: list[dict[int, float]] = [{} for _ in range(pos)]
     for (p, d), val in zip(cols, raw, strict=True):
@@ -362,10 +387,16 @@ def online_rows(kind: str, draws: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def _rank_pick(rng: random.Random, ordered: list[int], k: int) -> list[int]:
-    """从已排序候选里取前 k，用 seeded 抖动做同分稳定但可变的破平局。"""
-    keyed = [(i, rng.random(), v) for i, v in enumerate(ordered)]
-    keyed.sort(key=lambda t: (t[0], t[1]))  # 保持给定优先级
+def _rank_pick(
+    rng: random.Random, ordered: list[int], k: int, scores: dict[int, float] | None = None
+) -> list[int]:
+    """按优先级取前 k。提供 scores 时同分用 seeded rng 破平局；不提供时保持给定顺序但仍消费 rng。"""
+    if scores is None:
+        keyed = [(float(i), rng.random(), v) for i, v in enumerate(ordered)]
+        keyed.sort(key=lambda t: (t[0], t[1]))
+        return sorted(v for _, _, v in keyed[:k])
+    keyed = [(-float(scores.get(v, 0.0)), rng.random(), v) for v in ordered]
+    keyed.sort()
     return sorted(v for _, _, v in keyed[:k])
 
 
@@ -455,14 +486,15 @@ def _zone_cover(rng: random.Random, kind: str, freq: dict[int, int]) -> list[int
     buckets: dict[int, list[int]] = {i: [] for i in range(3)}
     for v in range(lo, hi + 1):
         buckets[zone_idx(zones, v)].append(v)
+    jitter = {v: rng.random() for v in range(lo, hi + 1)}
     for i in buckets:
-        buckets[i].sort(key=lambda v: (-freq[v], v))
+        buckets[i].sort(key=lambda v: (-freq[v], jitter[v], v))
     out: list[int] = []
     for i in range(min(3, pick)):
         if buckets[i]:
             out.append(buckets[i].pop(0))
     rest = [v for i in buckets for v in buckets[i]]
-    rest.sort(key=lambda v: (-freq[v], v))
+    rest.sort(key=lambda v: (-freq[v], jitter[v], v))
     for v in rest:
         if len(out) >= pick:
             break
@@ -509,7 +541,8 @@ def _pick_aux(rng: random.Random, kind: str, draws: list[dict[str, Any]], offset
         omission[v] = gap
     maxf = max(1, max(freq.values()))
     score = {v: (freq[v] / maxf) * 0.6 + min(1.0, omission[v] / 30) * 0.4 for v in range(lo, hi + 1)}
-    ranked = sorted(score, key=lambda v: (-score[v], v))
+    jitter = {v: rng.random() for v in range(lo, hi + 1)}
+    ranked = sorted(score, key=lambda v: (-score[v], jitter[v], v))
     start = offset % max(1, len(ranked) - cnt + 1)
     return sorted(ranked[start : start + cnt])
 
@@ -563,14 +596,16 @@ def recommend_multi(kind: str, draws: list[dict[str, Any]], seed: int = 1, group
     balanced = hot[:half] + an["cold"][: pick - half]
     pop_key = (lambda v: (pop[v], v)) if pop else (lambda v: (number_popularity(v), v))
     by_pop = sorted(all_tokens, key=pop_key)
+    # _rank_pick 的 scores 越大越优先；冷门避撞要低撞号先选 → 取负热度
+    avoid_scores = {v: -float(pop_key(v)[0]) for v in all_tokens}
     strategies: list[tuple[str, list[int]]] = [
-        ("稳健·热号", _rank_pick(rng, hot, pick)),
-        ("进取·遗漏", _rank_pick(rng, by_omit, pick)),
-        ("冷热均衡", _rank_pick(rng, balanced + hot, pick)),
+        ("稳健·热号", _rank_pick(rng, hot, pick, scores=freq)),
+        ("进取·遗漏", _rank_pick(rng, by_omit, pick, scores=omission)),
+        ("冷热均衡", _rank_pick(rng, balanced + hot, pick, scores=freq)),
         ("区间覆盖", _zone_cover(rng, kind, freq)),
         ("冷热加权", _weighted_pick(rng, all_tokens, [freq[v] + 1 for v in all_tokens], pick)),
         ("随机基准", sorted(rng.sample(all_tokens, pick))),
-        ("冷门避撞", _rank_pick(rng, by_pop, pick)),
+        ("冷门避撞", _rank_pick(rng, by_pop, pick, scores=avoid_scores)),
     ]
     picks: list[dict[str, Any]] = []
     for si, (name, main) in enumerate(strategies[: max(1, groups)]):
@@ -704,8 +739,13 @@ def _expected_hits(kind: str) -> float:
             return (pos - 1) / 10 + 1 / (last_hi + 1)
         return pos / 10
     if kind in POOL_SPEC:
+        from typing import cast
+
+        from .domain import RULES, Lottery
+
         _lo, hi, pick = POOL_SPEC[kind]
-        return pick * pick / hi
+        # 期望命中 = 票面 k × 开奖球数 D / 池 N（k=D 时退化为 k²/N）
+        return pick * RULES[cast("Lottery", kind)].main_count / hi
     return 0.0
 
 

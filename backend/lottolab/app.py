@@ -30,7 +30,8 @@ from .domain import DISCLAIMER, RULES, DatasetKind, DrawInput, Lottery
 from .ingestion import digest, freeze_dataset, ingest_records, load_draws, parse_csv
 from .predict import backtest_strategies, online_rows, recommend, recommend_multi
 from .ratelimit import PostRateLimiter, client_ip
-from .review import log_predictions, reconcile, review_summary
+from .review import log_predictions, review_summary
+from .review import reconcile as reconcile_sessions
 from .schemas import (
     BacktestRequest,
     CoverRequest,
@@ -125,7 +126,7 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
     @app.middleware("http")
     async def post_rate_limit(request: Request, call_next):
         if request.method == "POST" and request.url.path.startswith("/api/"):
-            if not limiter.allowed(client_ip(request)):
+            if not limiter.allowed(client_ip(request, settings.proxy_list)):
                 return JSONResponse(status_code=429, content={"detail": "请求过于频繁，请稍后再试"})
         return await call_next(request)
 
@@ -151,7 +152,10 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
                 )
             limit = settings.max_csv_bytes + 65536 if request.url.path == "/api/v1/imports/csv" else 65536
             length = request.headers.get("content-length")
-            if length and (not length.isdigit() or int(length) > limit):
+            if length is None:
+                # chunked 无 Content-Length 时无法在读体前限幅 → 拒绝，防绕过
+                return JSONResponse(status_code=413, content={"detail": "请求缺少 Content-Length，已拒绝"})
+            if not length.isdigit() or int(length) > limit:
                 return JSONResponse(status_code=413, content={"detail": "请求内容超过大小限制"})
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -406,10 +410,12 @@ def create_app(settings: Settings | None = None, session_factory=None) -> FastAP
         return {"logged": n, "kind": kind, "target_issue": target_issue}
 
     @app.get("/api/v1/predictions/review")
-    def review_predictions_ep(db: DB, kind: str = "ssq"):
+    def review_predictions_ep(db: DB, kind: str = "ssq", reconcile: bool = Query(False)):
+        """GET 默认只读汇总；显式 reconcile=true 才触发对账写库（Online 页按钮）。"""
         if kind not in ONLINE_KINDS:
             raise HTTPException(400, "未知彩种")
-        reconcile(db, kind)
+        if reconcile:
+            reconcile_sessions(db, kind)
         return review_summary(db, kind)
 
     @app.get("/api/v1/ingestions")

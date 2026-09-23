@@ -48,8 +48,8 @@ pnpm --dir frontend dev
 
 ```bash
 python -m pip check
-python -m ruff check backend tests scripts migrations app.py
-python -m ruff format --check backend tests scripts migrations app.py
+python -m ruff check backend tests collector scripts migrations app.py
+python -m ruff format --check backend tests collector scripts migrations app.py
 python -m mypy backend
 python -m pytest -q
 pnpm --dir frontend exec prettier --check src e2e playwright.config.ts playwright.cloud.config.ts vite.config.ts

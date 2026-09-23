@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     max_active_jobs: int = Field(default=8, ge=1, le=8)
     max_csv_bytes: int = Field(default=8 * 1024 * 1024, ge=1024, le=8 * 1024 * 1024)
     rate_limit_posts_per_minute: int = Field(default=120, ge=0, le=6000)
+    trusted_proxies: str = (
+        ""  # extra proxy IPs allowed to set X-Forwarded-For; loopback/private always trusted
+    )
 
     @property
     def origins(self) -> list[str]:
@@ -35,6 +38,10 @@ class Settings(BaseSettings):
     @property
     def hosts(self) -> list[str]:
         return [s.strip() for s in self.allowed_hosts.split(",") if s.strip()]
+
+    @property
+    def proxy_list(self) -> list[str]:
+        return [s.strip() for s in self.trusted_proxies.split(",") if s.strip()]
 
 
 @lru_cache

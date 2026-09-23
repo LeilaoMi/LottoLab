@@ -45,8 +45,7 @@ def sync_kind(factory, kind: str, n: int) -> int:
     recs, src_url, raw = IN.build(kind)
     recs = recs[:n]
     if not recs:
-        print(f"[{kind}] 源不可达", flush=True)
-        return 0
+        raise RuntimeError(f"[{kind}] 源返回空数据，每日同步中止（避免静默零更新）")
     with factory() as session:
         snapshot_hash = save_snapshot(session, raw, None)
         run = IngestionRun(
@@ -107,7 +106,16 @@ def main() -> None:
         url = url.replace("postgresql://", "postgresql+psycopg://", 1)
     factory = make_session_factory(make_engine(url, pooled=False))
     n = _recent()
-    total = sum(sync_kind(factory, kind, n) for kind in KINDS)
+    total = 0
+    failures: list[str] = []
+    for kind in KINDS:
+        try:
+            total += sync_kind(factory, kind, n)
+        except Exception as exc:  # noqa: BLE001 — 单彩种失败需汇总后非零退出
+            failures.append(str(exc))
+            print(f"[{kind}] 失败：{exc}", flush=True)
+    if failures:
+        raise SystemExit(f"每日同步失败 {len(failures)} 个彩种：" + "; ".join(failures))
     print(f"每日同步完成：本次新增 {total} 期", flush=True)
 
 

@@ -66,6 +66,8 @@ def vercel_settings(environ: Mapping[str, str] | None = None) -> Settings:
     if not timeout.isdigit() or not 1 <= int(timeout) <= 240:
         raise ValueError("云端单任务运行上限须为 1–240 秒，为函数收尾保留时间")
     token = (env.get("LOTTOLAB_ADMIN_TOKEN", "") or "").strip()
+    if token and len(token) < 32:
+        raise ValueError("LOTTOLAB_ADMIN_TOKEN 已设置但不足 32 字符；请加长或删除以启用公开写")
     if len(token) >= 32:
         admin_token, public_mode = token, False
     else:

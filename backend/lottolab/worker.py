@@ -139,11 +139,16 @@ def perform_job(job_id: str, settings_data: dict):
             db.commit()
     except Exception as exc:
         logger.exception("Job %s failed", job_id)
+        # 对外只暴露可安全展示的信息；完整堆栈仅进服务端日志
+        if isinstance(exc, ValueError):
+            public_error = str(exc)[:400]
+        else:
+            public_error = f"任务执行失败（{type(exc).__name__}），详情见服务端日志"
         with factory() as db:
             db.execute(
                 update(Job)
                 .where(Job.id == job_id, Job.status == "running")
-                .values(status="failed", error=str(exc)[:1200], finished_at=now())
+                .values(status="failed", error=public_error, finished_at=now())
             )
             db.commit()
     finally:

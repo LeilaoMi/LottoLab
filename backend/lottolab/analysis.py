@@ -283,6 +283,8 @@ def _digit_randomness(draws: list[dict], rule: Rule, seed: int) -> dict:
                 "p_value": p_value,
                 "effect_size": round(stat / size, 5),
                 "effect_label": "χ²/期（Cramér 型效应）",
+                "low_expected": exp < 5,
+                "expected_per_bin": round(exp, 3),
             }
         )
     n_tests = len(tests)
@@ -290,6 +292,15 @@ def _digit_randomness(draws: list[dict], rule: Rule, seed: int) -> dict:
         t["adjusted_p_value"] = min(1.0, t["p_value"] * n_tests)
         t["significant"] = t["adjusted_p_value"] < 0.05
     significant = sum(t["significant"] for t in tests)
+    low_bins = [t for t in tests if t.get("low_expected")]
+    limitations = [
+        "数字型按位做卡方拟合优度检验，用精确 χ² 分布求 p 值（无 Monte Carlo 模拟）。",
+        "各位独立检验后做 Bonferroni 校正；有限样本检验功效有限，显著偏离不等于可预测。",
+    ]
+    if low_bins:
+        limitations.append(
+            f"有 {len(low_bins)} 个位置的期望频数 < 5，卡方近似不可靠，p 值仅供参考（low_expected）。"
+        )
     return {
         "family": "digit",
         "sample_size": size,
@@ -300,16 +311,14 @@ def _digit_randomness(draws: list[dict], rule: Rule, seed: int) -> dict:
         "correction_family_size": n_tests,
         "significant_count": significant,
         "verdict": "REVIEW_NEEDED" if significant else "NOT_SIGNIFICANT",
+        "low_power_warning": bool(low_bins),
         "tests": tests,
         "start_issue": draws[0]["issue"],
         "end_issue": draws[-1]["issue"],
         "interpretation": "逐位数字均匀性检验；校正后存在需复核的偏离，不等于可预测。"
         if significant
         else "本次逐位检验未检出校正后显著偏离；这不证明绝对随机。",
-        "limitations": [
-            "数字型按位做卡方拟合优度检验，用精确 χ² 分布求 p 值（无 Monte Carlo 模拟）。",
-            "各位独立检验后做 Bonferroni 校正；有限样本检验功效有限，显著偏离不等于可预测。",
-        ],
+        "limitations": limitations,
     }
 
 
@@ -438,19 +447,62 @@ def randomness(draws: list[dict], rule: Rule, *, trials: int = 4999, seed: int =
     }
 
 
+def _simulate_digit_his(rule: Rule) -> list[int]:
+    """DIGIT 模拟用的各位上界（含末位 last_max）。"""
+    return [
+        rule.last_max if (rule.last_max is not None and i == rule.main_count - 1) else rule.main_max
+        for i in range(rule.main_count)
+    ]
+
+
+def _digit_hits_pmf(his: list[int]) -> list[float]:
+    """固定全 0 票 vs 各位均匀开奖的命中数分布（Poisson-binomial 卷积）。"""
+    pmf = [1.0]
+    for hi in his:
+        p = 1.0 / (hi + 1)
+        nxt = [0.0] * (len(pmf) + 1)
+        for k, mass in enumerate(pmf):
+            nxt[k] += mass * (1 - p)
+            nxt[k + 1] += mass * p
+        pmf = nxt
+    return pmf
+
+
 def simulate(rule: Rule, iterations: int, seed: int) -> dict:
     if not 1000 <= iterations <= 1000000:
         raise ValueError("模拟次数必须在 1000–1000000 之间")
     rng = np.random.default_rng(seed)
-    main = rng.hypergeometric(
-        rule.main_count, rule.main_max - rule.main_count, rule.main_count, size=iterations
-    )
-    special = rng.hypergeometric(
-        rule.special_count, rule.special_max - rule.special_count, rule.special_count, size=iterations
-    )
+    special: np.ndarray
+    expected: float
+    if rule.family == "DIGIT":
+        his = _simulate_digit_his(rule)
+        hits = np.zeros(iterations, dtype=int)
+        all_match = np.ones(iterations, dtype=bool)
+        for hi in his:
+            drawn = rng.integers(0, hi + 1, size=iterations)
+            match = drawn == 0
+            hits += match
+            all_match &= match
+        main = hits
+        special = np.zeros(iterations, dtype=int)
+        exact: list[float] = _digit_hits_pmf(his)
+        expected = sum(1.0 / (hi + 1) for hi in his)
+        method = "固定全 0 票与按位均匀开奖的交集，Poisson-binomial 精确分布"
+        note = "数字型各位独立均匀；头奖概率为各位同时命中，与组合数 1/combinations 一致。"
+    else:
+        main = rng.hypergeometric(
+            rule.main_count, rule.main_max - rule.main_count, rule.main_count, size=iterations
+        )
+        special = rng.hypergeometric(
+            rule.special_count, rule.special_max - rule.special_count, rule.special_count, size=iterations
+        )
+        exact = overlap_pmf(rule.main_max, rule.main_count, rule.main_count)
+        expected = rule.main_count**2 / rule.main_max
+        method = "固定一注与均匀合法开奖的交集，按精确超几何分布采样"
+        note = "极小概率使用组合公式；有限次数中未出现头奖，不代表头奖概率为零。"
+        all_match = (main == rule.main_count) & (special == rule.special_count)
     histogram = np.bincount(main, minlength=rule.main_count + 1)
-    exact = overlap_pmf(rule.main_max, rule.main_count, rule.main_count)
-    jackpots = int(np.sum((main == rule.main_count) & (special == rule.special_count)))
+    jackpots = int(np.sum(all_match))
     mean = float(main.mean())
     standard_error = float(main.std(ddof=1) / sqrt(iterations))
     return {
@@ -468,11 +520,11 @@ def simulate(rule: Rule, iterations: int, seed: int) -> dict:
             for k in range(rule.main_count + 1)
         ],
         "mean_hits": mean,
-        "expected_hits": rule.main_count**2 / rule.main_max,
+        "expected_hits": expected,
         "mean_confidence_interval": [mean - 1.96 * standard_error, mean + 1.96 * standard_error],
         "jackpots": jackpots,
         "jackpot_probability": 1 / rule.combinations,
         "jackpot_confidence_interval": wilson(jackpots, iterations),
-        "method": "固定一注与均匀合法开奖的交集，按精确超几何分布采样",
-        "note": "极小概率使用组合公式；有限次数中未出现头奖，不代表头奖概率为零。",
+        "method": method,
+        "note": note,
     }

@@ -17,7 +17,7 @@ from lottolab.domain import dlt_fixed_amount, dlt_prize_tier_for, qlc_prize_tier
 SPEC: dict[str, dict[str, Any]] = {
     "ssq": {"main": 6, "max": 33, "aux": 1, "aux_max": 16, "digit": False},
     "dlt": {"main": 5, "max": 35, "aux": 2, "aux_max": 12, "digit": False},
-    "qlc": {"main": 7, "max": 30, "aux": 1, "aux_max": 30, "digit": False, "no_dup_with_main": True},
+    "qlc": {"main": 7, "max": 30, "aux": 0, "aux_max": 0, "digit": False},
     "kl8": {"main": None, "max": 80, "aux": 0, "aux_max": 0, "digit": False},
     "fc3d": {"main": 3, "max": 9, "aux": 0, "aux_max": 0, "digit": True},
     "pl3": {"main": 3, "max": 9, "aux": 0, "aux_max": 0, "digit": True},

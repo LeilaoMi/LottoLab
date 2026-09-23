@@ -9,9 +9,9 @@
 | 方法 | 默认 | 说明 |
 | :--- | :--- | :--- |
 | GET | 公开 | 私有部署（`LOTTOLAB_REQUIRE_READ_AUTH=true`）下需令牌；`health/rules/models` 始终公开 |
-| POST | 需写权限 | 本机回环 + 允许本地写入，或 `X-Admin-Token`；云端未设令牌时公开，设令牌后需令牌 |
+| POST | 需写权限 | 本机回环 + 允许本地写入，或 `X-Admin-Token`；云端未设令牌时公开，设令牌后需令牌（已设令牌不足 32 字符启动失败） |
 
-写请求按 IP 滑动窗口限流（默认 120 次/分，`LOTTOLAB_RATE_LIMIT_POSTS_PER_MINUTE`，0 关闭），超限 429。CSV 另有大小限制（本地 8 MiB / 云端 4 MiB）。
+写请求按 IP 滑动窗口限流（默认 120 次/分，`LOTTOLAB_RATE_LIMIT_POSTS_PER_MINUTE`，0 关闭），超限 429。`X-Forwarded-For` 仅在直连地址为受信代理（回环/内网或 `LOTTOLAB_TRUSTED_PROXIES`）时采用；缺 `Content-Length` 的 POST 直接 413。CSV 另有大小限制（本地 8 MiB / 云端 4 MiB）。
 
 ## 只读
 
@@ -31,7 +31,7 @@
 | `/api/v1/verify` | kind, lines(换行分隔), codes(逗号分隔) | 只读验奖，单次 200 注×10 期 |
 | `/api/v1/recommend` | kind, seed, groups(≤8) | 多策略推荐 + 结构分/撞号/冷门度 |
 | `/api/v1/recommend/backtest` | kind, window(20–300) | 各策略滚动回测 vs 均匀期望 |
-| `/api/v1/predictions/review` | kind | 台账对账（自动触发 reconcile） |
+| `/api/v1/predictions/review` | kind, reconcile(默认 false) | 台账只读汇总；`reconcile=true` 才触发对账写库 |
 | `/api/v1/ingestions` | lottery, dataset_kind | 最近 50 次导入记录 |
 | `/api/v1/quality` | lottery, dataset_kind | 未处理质量问题（含冲突双方） |
 | `/api/v1/jobs` | lottery, dataset_kind, kind | 最近 40 个任务（不含完整结果） |

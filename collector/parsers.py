@@ -29,6 +29,13 @@ def parse_cwl(text: str, kind: str):
         elif kind == "qlc":
             main = [int(x) for x in it["red"].split(",")]
             special = [int(it["blue"])] if str(it.get("blue", "")).isdigit() else []
+        elif kind == "kl8":
+            main = [int(x) for x in str(it.get("red", "")).split(",") if str(x).strip().isdigit()]
+            special = [int(it["blue"])] if str(it.get("blue", "")).isdigit() else []
+        elif kind == "fc3d":
+            raw = str(it.get("red", "")).replace(",", " ")
+            main = [int(x) for x in raw.split() if x.isdigit()]
+            special = []
         else:
             raise ValueError(f"parse_cwl 不支持 {kind}")
         sales = it.get("sales") or None
@@ -90,12 +97,12 @@ def parse_17500(text: str, kind: str, main_count: int, special_count: int = 0, l
     return out
 
 
-# ---------- 体彩官方 webapi.sporttery.cn（getHistoryPageListV1，需 Referer 头）：dlt ----------
+# ---------- 体彩官方 webapi.sporttery.cn（getHistoryPageListV1，需 Referer 头）：dlt/pl3/pl5/qxc ----------
 def parse_sporttery(text: str, kind: str) -> list[dict]:
     data = json.loads(text)
     if not data.get("success") or not isinstance(data.get("value"), dict):
         raise ValueError("sporttery 返回非成功结构")
-    picks = {"dlt": (5, 2)}.get(kind)
+    picks = {"dlt": (5, 2), "pl3": (3, 0), "pl5": (5, 0), "qxc": (7, 0)}.get(kind)
     if not picks:
         raise ValueError(f"parse_sporttery 不支持 {kind}")
     mc, sc = picks

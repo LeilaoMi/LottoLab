@@ -199,7 +199,9 @@ def run_backtest(
                     main_p = coherent_marginals(
                         main_estimator.predict_proba(main_x[t])[:, 1], rule.main_count
                     )
-                main_ticket = choose_top(main_p, rule.main_count, rng)
+                # 快乐8 规则 main_count=20 是开奖球数；可售票面为 1..10（与推荐 PICK 一致）
+                ticket_k = 10 if rule.code == "kl8" else rule.main_count
+                main_ticket = choose_top(main_p, ticket_k, rng)
                 actual = draws[t]
                 main_hits = len(set(main_ticket) & set(actual["main_numbers"]))
                 main_brier, main_loss = binary_metrics(main_p, main_y[t])
