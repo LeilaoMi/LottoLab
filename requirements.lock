@@ -26,8 +26,8 @@ numpy==2.5.3
 packaging==26.3
 pathspec==1.1.1
 pluggy==1.6.0
-psycopg==3.3.5
-psycopg-binary==3.3.5
+psycopg==3.3.6
+psycopg-binary==3.3.6
 pydantic==2.13.5
 pydantic-settings==2.15.0
 pydantic_core==2.46.5
@@ -40,10 +40,10 @@ ruff==0.16.7
 scikit-learn==1.9.1
 scipy==1.18.1
 soupsieve==2.9.2
-SQLAlchemy==2.0.52
+SQLAlchemy==2.1.1
 starlette==1.6.0
 threadpoolctl==3.6.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0
-tzdata==2026.3
-uvicorn==0.52.4
+tzdata==2026.4
+uvicorn==0.54.0
