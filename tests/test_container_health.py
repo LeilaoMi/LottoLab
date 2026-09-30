@@ -21,15 +21,44 @@ api/db 仍各带自己的。这三条任一被改坏，都会把 container job �
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
-import yaml
-
 ROOT = Path(__file__).resolve().parents[1]
+COMPOSE = (ROOT / "compose.yaml").read_text(encoding="utf-8")
 
 
-def compose() -> dict:
-    return yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
+def service_block(name: str) -> str:
+    """取 compose.yaml 里某个 service 的缩进块。
+
+    刻意不用 PyYAML：requirements.lock 里没有 pyyaml，CI 只装 requirements.lock。
+    加一个仅测试用的解析依赖会让「离线可跑、零多余依赖」这个前提破掉
+    （2026-09-30 实测踩过：本地装了 yaml 所以没发现，CI 直接 ModuleNotFoundError）。
+    这里只需要「缩进 + 少量 key」，正则足够，也省掉一个依赖。
+    """
+    lines = COMPOSE.splitlines()
+    start = None
+    for i, line in enumerate(lines):
+        if re.match(rf"^  {name}:\s*$", line):
+            start = i
+            break
+    assert start is not None, f"compose.yaml 里找不到 service {name}"
+    out = [lines[start]]
+    for line in lines[start + 1 :]:
+        if line.strip() and not line.startswith("   "):
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
+def has_healthcheck(name: str) -> bool:
+    return re.search(r"^\s+healthcheck:\s*$", service_block(name), re.M) is not None
+
+
+def healthcheck_lines(name: str) -> str:
+    block = service_block(name)
+    m = re.search(r"^\s+healthcheck:\n((?:\s{4,}.*\n?)+)", block, re.M)
+    return m.group(1) if m else ""
 
 
 def test_dockerfile_has_no_image_level_healthcheck_instruction() -> None:
@@ -65,8 +94,7 @@ def test_worker_has_no_healthcheck() -> None:
     python:3.12-slim 未保证安装的 procps；读 /proc/<pid>/cmdline 依赖 Linux，
     等于写一条本机跑不了的检查。而 `--wait` 会把 unhealthy 当失败。
     """
-    worker = compose()["services"]["worker"]
-    assert "healthcheck" not in worker, (
+    assert not has_healthcheck("worker"), (
         "worker 不应配 healthcheck：它不监听端口，任何常见写法都会永远 unhealthy，"
         "把 compose --wait 弄失败（2026-09-30 实测）"
     )
@@ -74,33 +102,35 @@ def test_worker_has_no_healthcheck() -> None:
 
 def test_worker_still_waits_for_api_to_be_healthy() -> None:
     """没有健康判定不等于失去顺序保证：worker 仍必须等 api healthy 才启动。"""
-    dep = compose()["services"]["worker"]["depends_on"]["api"]
-    assert dep["condition"] == "service_healthy", (
+    block = service_block("worker")
+    assert re.search(r"depends_on:\s*\n\s+api:\s*\n\s+condition:\s*service_healthy", block), (
         "worker 仍应等 api healthy 后再启动 —— 那是它唯一的启动顺序保障"
     )
 
 
 def test_worker_shares_api_image_without_rebuilding() -> None:
     """worker 复用 api 的镜像，不自己 build（否则同一镜像构建两次）。"""
-    api, worker = compose()["services"]["api"], compose()["services"]["worker"]
-    assert worker["image"] == api["image"], "worker 应与 api 用同一个镜像名"
-    assert "build" not in worker, "worker 不应有自己的 build 段"
-    assert worker["command"] != api["command"], "worker 与 api 的启动命令应不同"
-    assert "build" in api, "api 应保有 build 段（worker 靠它产出共用镜像）"
+    api, worker = service_block("api"), service_block("worker")
+    api_image = re.search(r"^\s+image:\s*(\S+)", api, re.M)
+    worker_image = re.search(r"^\s+image:\s*(\S+)", worker, re.M)
+    assert api_image and worker_image, "api/worker 都应声明 image"
+    assert api_image.group(1) == worker_image.group(1), "worker 应与 api 用同一个镜像名"
+    assert not re.search(r"^\s+build:", worker, re.M), "worker 不应有自己的 build 段"
+    assert re.search(r"^\s+build:", api, re.M), "api 应保有 build 段（worker 靠它产出共用镜像）"
+    assert '"-m", "lottolab.worker"' in worker, "worker 应以 python -m lottolab.worker 启动"
 
 
 def test_api_and_db_keep_their_own_healthchecks() -> None:
     """api/db 必须有健康检查 —— 它们才是真正被 --wait 等待的服务。"""
-    cfg = compose()["services"]
     for svc in ("api", "db"):
-        assert "healthcheck" in cfg[svc], f"{svc} 缺 healthcheck"
-    assert "/api/v1/health" in " ".join(str(x) for x in cfg["api"]["healthcheck"]["test"])
-    assert "pg_isready" in " ".join(str(x) for x in cfg["db"]["healthcheck"]["test"])
+        assert has_healthcheck(svc), f"{svc} 缺 healthcheck"
+    assert "/api/v1/health" in healthcheck_lines("api"), "api 应探 /api/v1/health"
+    assert "pg_isready" in healthcheck_lines("db"), "db 应探 pg_isready"
 
 
 def test_api_healthcheck_uses_exec_form() -> None:
     """api 打的是 HTTP 端点，用 CMD（exec）即可，不该经过 shell。"""
-    assert compose()["services"]["api"]["healthcheck"]["test"][0] == "CMD"
+    assert re.search(r'test:\s*\[\s*"CMD"', healthcheck_lines("api")), "api 的健康检查应用 exec 形式"
 
 
 def test_ci_still_waits_and_builds() -> None:
@@ -108,5 +138,4 @@ def test_ci_still_waits_and_builds() -> None:
     ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "--wait" in ci, "CI 的 compose up 应带 --wait"
     assert "--build" in ci, "CI 的 compose up 应带 --build"
-    # worker 的镜像由 api 的 build 产出，所以 CI 里那次 up 不能漏 --build
     assert "docker compose -p lottolab-ci up -d --build --wait" in ci

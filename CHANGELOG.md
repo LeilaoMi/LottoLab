@@ -111,6 +111,22 @@ worker 仍等 api healthy、worker 复用 api 镜像不重复 build、api/db 保
 CI 仍带 `--wait`+`--build`。两个变异测试确认有效（重新加回镜像级检查 → 挂 1；
 给 worker 加 pgrep 检查 → 挂 1）。
 
+### 修复 · 回归锁自己依赖了未声明的 PyYAML（2026-09-30）
+
+`tests/test_container_health.py` 第一版 `import yaml` 解析 compose.yaml，但 `requirements.lock`
+里没有 pyyaml，CI 只装 lock 文件 —— backend job 直接
+`ModuleNotFoundError: No module named 'yaml'`。
+
+**本地没发现的原因**：本机开发环境装了 pyyaml（我为了读 workflow 顺手装的），
+所以 `pytest` 全绿。现有 28 个测试文件里没有任何一个 `import yaml`，只有我新加的这一个。
+
+**修法**：改用标准库 `re` + 缩进切片读 compose.yaml。这些测试只需要「切出某个 service 的
+块」和「有没有 healthcheck」，正则足够，也不用为一个测试引解析依赖 —— 「零多余依赖、
+离线可跑」是这个项目的前提，不该为一个测试破掉。变异测试确认断言仍有效。
+
+这条与上面的 HEALTHCHECK 回归是同一天、同一批 CI 反馈暴露的两个问题，性质相同：
+**本地绿 ≠ CI 绿**，差别都在「本地环境比 CI 多/少了一些东西」。
+
 ### 文档 · 清理空的「未发布」章节（2026-09-30）
 
 `## [未发布]` 此前是空标题（下一行直接是 1.1.0），本节填入上述内容。
