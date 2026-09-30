@@ -174,7 +174,7 @@ docker compose up -d --build --wait
 
 ## 质量门禁
 
-每次推送与 PR 自动运行三条流水：后端（PostgreSQL 17 真库回归）、浏览器（Playwright 本地与云端两种模式）、容器（构建→灌数据→重建→校验数据与快照保留）。后端门禁为 `pip check`、Ruff 检查与格式、`mypy`、271 项 pytest（需 PostgreSQL 的 2 项在 CI 真库跑）；前端门禁为 Prettier 与构建。文档改动需核对命令、链接与真实渲染 —— `tests/test_readme_claims.py` 会把 README 的关键数字与承诺对到真实 pytest 收集数与具体代码路径上，改了 README 忘了改代码（或反过来）会直接红。
+每次推送与 PR 自动运行三条流水：后端（PostgreSQL 17 真库回归）、浏览器（Playwright 本地与云端两种模式）、容器（构建→灌数据→重建→校验数据与快照保留）。后端门禁为 `pip check`、Ruff 检查与格式、`mypy`、275 项 pytest（需 PostgreSQL 的 2 项在 CI 真库跑）；前端门禁为 Prettier 与构建。文档改动需核对命令、链接与真实渲染 —— `tests/test_readme_claims.py` 会把 README 的关键数字与承诺对到真实 pytest 收集数与具体代码路径上，改了 README 忘了改代码（或反过来）会直接红。
 
 ## 文档导航
 
