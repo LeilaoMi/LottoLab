@@ -111,6 +111,33 @@ worker 仍等 api healthy、worker 复用 api 镜像不重复 build、api/db 保
 CI 仍带 `--wait`+`--build`。两个变异测试确认有效（重新加回镜像级检查 → 挂 1；
 给 worker 加 pgrep 检查 → 挂 1）。
 
+### 事故 · push 后未跑迁移，线上 `/api/v1/ingestions` 一度 503（2026-09-30，已修复）
+
+上面那条 `sources_cross_checked` 迁移，我**先 push 后才想起迁移**。Vercel 自动部署
+`main`，`build` 步骤不执行 `alembic upgrade`，于是线上变成「新代码 + 旧表结构」：
+
+```
+GET /api/v1/ingestions  ->  503 "数据库暂时不可用，请检查连接和迁移状态后重试"
+```
+
+而 `/health`、`/rules`、`/overview`、`/draws`、`/quality`、`/jobs`、`/models` 全是 200 ——
+因为只有 `/ingestions` 会 `select(IngestionRun)`，也就是只有它引用了新列。ORM 会在
+SELECT 里列出模型全部列，所以「模型加了列、表里没有」= `UndefinedColumn` = 503。
+
+**一个端点挂、其余全绿**，极易误判。我先怀疑是 Docker Hub 限流（因为日志里确实有
+`pull access denied for lottolab`，而那行在历史成功 run 里也出现过），绕了一圈才定位到
+`is unhealthy` / 列缺失。
+
+**已修复**：对线上 Neon 执行 `alembic upgrade head`（`c41predlog01 -> x2srcval01`），
+161 行历史记录全部回填 `sources_cross_checked = false`（0 行被伪造成 true），
+`/api/v1/ingestions` 恢复 200，全部 9 个端点复验 200。
+
+**流程修正**（已写入 [docs/deployment.md](../docs/deployment.md)「⚠️ 改了 ORM 模型就必须先跑迁移」）：
+改数据库结构时必须「先确认线上版本 → 先备份 → **push 之前**跑迁移 → 再 push → 逐端点复验」，
+顺序反过来就是线上 503 的窗口期。另外记录了一个坑：执行 alembic 时不要把
+`.env.production.local` 里的变量全量灌进环境（`VERCEL_*` / `NX_*` / `TURBO_*` 会让
+`Settings()` 读到意外值而报令牌长度错误），迁移只需要 `LOTTOLAB_DATABASE_URL`。
+
 ### 修复 · 回归锁自己依赖了未声明的 PyYAML（2026-09-30）
 
 `tests/test_container_health.py` 第一版 `import yaml` 解析 compose.yaml，但 `requirements.lock`

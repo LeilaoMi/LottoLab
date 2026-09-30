@@ -180,3 +180,43 @@ python scripts/backup_cloud.py
 更新前备份数据，阅读 [变更记录](../CHANGELOG.md)，在独立环境检查新版本。仅代码变化可重新构建部署；涉及数据库结构时，先确认迁移和兼容范围。
 
 Vercel 可在控制台回滚到已验证的部署；Docker 可重新运行先前版本镜像。代码回滚不会自动恢复数据库，也不能替代数据库备份。
+
+### ⚠️ 改了 ORM 模型就必须先跑迁移 —— Vercel 会自动部署
+
+本项目推到 `main` 后 **Vercel 自动部署**，`build` 步骤**不会**执行 `alembic upgrade`
+（见上文「首次迁移只对空目标执行」）。所以改动数据库结构时，push 的瞬间线上就会变成
+「新代码 + 旧表结构」。
+
+这不是理论风险。2026-09-30 给 `IngestionRun` 加了一列 `sources_cross_checked`（迁移
+`x2srcval01`）后没有先跑迁移，线上立刻出现：
+
+```
+GET /api/v1/ingestions  ->  503 "数据库暂时不可用"
+```
+
+而 `/health`、`/rules`、`/overview`、`/draws`、`/quality`、`/jobs` 全都 200 —— 因为只有
+`/ingestions` 会 `select(IngestionRun)`，也就是只有它引用了新列。**一个端点挂掉、
+其余正常**，很容易误判成别的问题（我先误判成 Docker Hub 限流）。
+
+ORM 会在 SELECT 里列出模型的全部列，所以模型加了列而表里没有 → `UndefinedColumn` →
+被 `SQLAlchemyError` 处理器转成 503。
+
+**因此，涉及数据库结构的改动必须按这个顺序做：**
+
+1. 先确认线上当前 alembic 版本：`npx vercel env pull .env.production.local && python -m alembic current`
+   （`.env.production.local` 已被 `.gitignore` 覆盖，不要提交）
+2. **先备份要改的表**——加一列这类操作可用 `SELECT *` 导出成 JSON 备用
+3. **在 push 之前**跑 `python -m alembic upgrade head`，确认 `alembic current` 到达目标版本
+4. 再 push，让 Vercel 部署新代码
+5. 部署后逐个端点复验，别只看 `/health`
+
+顺序反过来（先 push 后迁移）就是线上 503 的窗口期。**若已经 push 才想起没迁移，
+补救是立刻执行第 3 步** —— 新列带 `server_default` 时 `ADD COLUMN` 是元数据操作，
+秒级完成，对 161 行的 `ingestion_runs` 无影响。
+
+另外注意：`.env.production.local` 里除 `LOTTOLAB_*` 还有 Vercel 自身的一堆变量
+（`VERCEL_*` / `NX_*` / `TURBO_*`）。**执行 alembic 时不要把它们全量灌进环境变量** ——
+`migrations/env.py` 会构造 `Settings()`，读到意外值会报
+「`LOTTOLAB_ADMIN_TOKEN` 已设置但不足 32 字符」（线上那个令牌本来就只有 11 位，
+线上能跑是因为 `cloud.py` 在 Vercel 环境下走 `public_mode` 分支、不校验令牌长度）。
+迁移只需要 `LOTTOLAB_DATABASE_URL` 一个变量。
