@@ -48,7 +48,7 @@ jobs:
       # 74% 是当前真实水平，门禁的作用是「不许再掉」，抬高要靠补采集层测试逐次提交。
       - run: pytest -q --junitxml=.local/pytest-ci.xml --cov=backend --cov=collector --cov-report=term --cov-report=xml --cov-fail-under=74
       - run: python scripts/check_postgres.py
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: backend-evidence
@@ -84,7 +84,7 @@ jobs:
         working-directory: frontend
       - run: pnpm exec playwright test --config playwright.cloud.config.ts
         working-directory: frontend
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: browser-evidence
@@ -125,7 +125,7 @@ jobs:
           assert all(hashlib.sha256(file.read_bytes()).hexdigest() == file.stem for file in files)
           print(json.dumps({'status': 'PASS', 'snapshots': len(files)}))
           PY
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: container-evidence
