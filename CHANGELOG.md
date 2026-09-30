@@ -77,6 +77,40 @@ CI 此前装了 `pytest-cov` 却不加 `--cov`、无 `fail_under`。现加
 - 新增 `.github/dependabot.yml`（pip 合成一个 PR / npm / github-actions 三档）
 - 补 `v1.0.0` 的 GitHub release 条目（tag 与 CHANGELOG 文档都在，缺 release 入口）
 
+### 修复 · 镜像级 HEALTHCHECK 让 CI container job 变红（2026-09-30，同日自查发现）
+
+上一条「给 Dockerfile 补 HEALTHCHECK」是个**我自己引入的回归**，由本次提交的 CI 抓出来：
+
+给 `docker/Dockerfile` 加了一条打 `/api/v1/health` 的镜像级健康检查后，CI 的 container job
+第 6 步 `docker compose up -d --build --wait` 失败于
+`container lottolab-ci-worker-1 is unhealthy`（exit 1）。
+
+**根因**：`compose.yaml` 里 worker 只写 `image: lottolab:local`、没有 `build:`，所以 worker
+与 api **共用同一个镜像**；而 worker 跑 `python -m lottolab.worker` —— 长驻进程、容器内
+没有 8000 端口的服务。那条面向 HTTP 端口的检查对 worker 永远失败，`--wait` 把 unhealthy
+当成失败。
+
+**为什么难发现**：这个错误只在 CI 日志里出现一行 `is unhealthy`，本地 `pytest` 全绿；
+而且**同样 `pull access denied for lottolab` 在历史成功 run 的日志里也出现过**
+（那是 worker 没有 `build:` 段、compose 随后自行 build api 的正常噪音）—— 我先误判成
+Docker Hub 限流，查了半天才定位到 `is unhealthy`。
+
+**修法**：回滚镜像级 HEALTHCHECK；worker 也不配 healthcheck，并在两处写下原因：
+
+- `pgrep` —— `python:3.12-slim` 不保证装了 procps，命令不存在会永远 unhealthy
+- 读 `/proc/<pid>/cmdline` —— 依赖 Linux，本机（Windows）跑不了，等于写了一条自己测不了的检查
+- 探测 api 的 HTTP 端点 —— worker 根本没有那个端口
+
+worker 仍通过 `depends_on: api: condition: service_healthy` 保证启动顺序；worker 真挂了由
+`scripts/check_container.py` 与后续 verify 步骤发现。要给它加健康检查，需先让它有
+自己的可探测端点。
+
+新增 `tests/test_container_health.py`（8 项）锁住这个回归：镜像级不得有 HEALTHCHECK 指令
+（只查行首指令，注释里必须能解释「为什么不加」）、worker 不得有 healthcheck、
+worker 仍等 api healthy、worker 复用 api 镜像不重复 build、api/db 保有各自检查、
+CI 仍带 `--wait`+`--build`。两个变异测试确认有效（重新加回镜像级检查 → 挂 1；
+给 worker 加 pgrep 检查 → 挂 1）。
+
 ### 文档 · 清理空的「未发布」章节（2026-09-30）
 
 `## [未发布]` 此前是空标题（下一行直接是 1.1.0），本节填入上述内容。

@@ -42,6 +42,11 @@ services:
       retries: 20
   worker:
     image: lottolab:local
+    # 刻意不给 build:：worker 与 api 共用同一个镜像（compose 会用 api 构建出的
+    # lottolab:local），多写一份 build 只会让镜像被构建两次。
+    # 也正因为共用镜像，docker/Dockerfile 里不能有面向 HTTP 端口的 HEALTHCHECK ——
+    # worker 是长驻进程、容器内没有 8000 端口的服务，那样的 healthcheck 会让
+    # `docker compose up --wait` 永远等不到 worker 变 healthy（2026-09-30 实测踩过）。
     environment:
       LOTTOLAB_DATABASE_URL: postgresql+psycopg://lottolab:${POSTGRES_PASSWORD}@db:5432/lottolab
       LOTTOLAB_DATA_DIR: /data
@@ -51,6 +56,22 @@ services:
     volumes:
       - app_data:/data
     command: ["python", "-m", "lottolab.worker"]
+    # 刻意不给 worker 配 healthcheck。
+    #
+    # worker 是长驻进程、容器内不监听任何端口，唯一能探的「活性」是进程本身。两种常见
+    # 写法在这里都有坑：
+    #   · pgrep —— python:3.12-slim 不保证装了 procps，命令不存在会永远 unhealthy
+    #   · 读 /proc/<pid>/cmdline —— 依赖 Linux，且本机（Windows）无法执行这条命令，
+    #     等于写了一条自己测不了的健康检查
+    # 而 `docker compose up --wait` 会把 unhealthy 当成失败，所以这条检查必须可靠，
+    # 不能靠猜。
+    #
+    # 现状：worker 不参与健康判定。compose 仍会等 api/db healthy 再启 worker
+    # （depends_on: api: condition: service_healthy），worker 真挂了由
+    # scripts/check_container.py 与后续 verify 步骤发现。
+    # 若将来要给它加健康检查，先给它一个自己的可探测端点（例如 worker 起一个
+    # /healthz 的 HTTP 端口），而不是探 api 的端口或猜进程名。
+    # 见 tests/test_container_health.py 里对应的回归锁。
 volumes:
   postgres_data:
   app_data:
