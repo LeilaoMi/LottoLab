@@ -2,6 +2,85 @@
 
 记录已发布版本中影响使用和部署的变化。源码与固定版本下载见 [Releases](https://github.com/LeilaoMi/LottoLab/releases)。
 
+## [未发布]
+
+### 修正 · README 的「多源交叉校验」承诺与生产写入路径不符（2026-09-30）
+
+逐行核实后发现：README 三条立场里的「多源交叉校验，不一致的期号拒绝入库」**对影子表成立、对生产表不成立**。
+
+- `collector/daily_sync.py` 是单源 append（硬编码 `source="17500"`，从不 import `collect_core.ingest`）
+- 带多源语义指纹比对（`records_by_source` → `accepted`/`rejected`）的逻辑只在 `collector/shadow_parallel.py`，
+  而影子的 `DIVERGE → sys.exit(1)` 触发 Actions 告警、**不阻止**行进入 `draws`
+- 线上 23 条 `ingestion_runs` 的 `source` 全是单值，`conflicts` 合计 0
+
+这不是代码缺陷被掩盖，而是**文档承诺与执行路径脱节**——201 项测试全绿的情况下长期存在，因为没有任何测试检查 README 的断言对应哪条代码路径。修法分三步：
+
+1. **README 改说实话**：立场改为「号码多源比对在影子层运行，分歧即告警（不拦生产写入）」，并加更正说明写清范围与后续兑现路径
+2. **`ingestion_runs` 增加 `sources_cross_checked`**（迁移 `x2srcval01`）：`conflicts=0` 无法区分「比对过且一致」与「压根没比对」，这一列才是判据。
+   历史行全部回填 `false` —— 按 `true` 回填等于凭空造出一批从未发生过的校验记录。
+   `daily_sync.py` 显式写 `sources_cross_checked=False`（不写也不会跑错，但写出来是为了不让 `conflicts=0` 被误读成「比对过」）
+3. **新增 `tests/test_readme_claims.py`**（10 项）：承诺 ↔ 代码路径对账门禁。检查 daily_sync 是否仍为单源、影子作业是否越权写 `draws`、
+   `sources_cross_checked` 是否同时存在于模型/迁移/API 三处、README 是否仍声称「拒绝入库」、
+   **并实际执行 `collect_core.ingest` 证明冲突确实被拒绝、单源确实被放行**
+   （后者是 README 更正说明的代码依据：`ingest` 对单源也放行，所以「过了 ingest」不能证明「经过多源校验」）
+
+### 修正 · 架构图标注 PWA 但仓库无 manifest 与 Service Worker（2026-09-30）
+
+README 架构图写「React 单页 · 9 页面 / PWA / 深色 / 移动端」。实测：全仓库 `manifest*.json` 0 个、
+`sw.js` / `service-worker.*` 0 个。深色与移动端属实（有 e2e 覆盖），**PWA 不属实**。
+架构图已改为「深色 / 移动端（无 PWA：未接 manifest / Service Worker）」。门禁测试会在将来真正接入 PWA 时自动通过。
+
+### 补强 · 显式警示 Vercel 未设令牌即开放写端点（2026-09-30）
+
+原访问表只写「Vercel 未设令牌 → 公开可访问（无需登录）」，容易被读成一句无害的默认值。已补警示：
+
+- `cloud.py` 的逻辑是「令牌 ≥32 位 → 鉴权；未设或不足 → `public_mode=True`」，
+  也就是不设令牌等于对互联网开放 12 个写端点（含 CSV 导入与触发重算）
+- 本地 / Docker 不受影响：`public_mode` 与 `allow_local_writes` 默认均 `False`，未授权写入一律 403
+- 限流按进程计数（`ratelimit.py` 自述「treat this as a backstop, not a quota」），
+  Vercel 多实例下防护弱于看起来的强度，不应依赖限流兜底
+
+### 补测 · 数据契约（`contract.py`）从 0% 覆盖到 98%（2026-09-30）
+
+实测覆盖率：backend 85%、collector 9%，合并 74%。缺口集中在 `contract.py`（0%），
+而它是 **8 个彩种号池规则的唯一事实源** —— 采集器与影子作业都 import 它，
+落库前每一注「合不合规」都走它。一处写错（例如把 qxc 末位号池写成 0..9）
+会让真实开奖号被静默计入 `rejected` 丢弃，而 201 项测试全绿。
+
+新增 `tests/test_contract_rules.py`（52 项，纯标准库、离线）：
+
+- **qxc 末位号池 0..14**（契约里唯一「某位号池不等于其它位」的情形），前 6 位仍 0..9
+- 池型必须排序、不可重复；数字型必须保持顺序、允许重号（排序会破坏组三/豹子形态判定）
+- qlc 特别号 1..30 且不得与基本号重复；kl8 无辅区
+- 期号归一：5 位补 `20`、qxc 保持 5 位、年内期次须 ∈1..366、期号年份须与开奖日期一致
+- 指纹语义：池型与输入顺序无关、数字型与顺序有关、同号码不同日期算矛盾
+- **采集层契约与后端领域模型对账**：两处各自定义 8 彩种规则，只改一边会让数据在落库前
+  被一边悄悄拒掉而两边单测都还绿
+
+三个变异测试确认断言有效：qxc 末位写成 9 → 挂 2 项；数字型误加 `sorted()` → 挂 3 项；
+去掉 qlc 特别号去重 → 挂 1 项。
+
+### 门禁 · CI 加覆盖率下限（2026-09-30）
+
+CI 此前装了 `pytest-cov` 却不加 `--cov`、无 `fail_under`。现加
+`--cov=backend --cov=collector --cov-fail-under=74`，并把 `coverage.xml` 一起归档。
+
+**只对合并值设门禁、不分列设**：分列看差异极大（backend 85% / collector 9%），
+但合并后统计层的高覆盖会稀释掉采集层的低覆盖。分列设会逼着人把 collector 抬到 85%，
+那不是靠补测试一轮能做到的。74% 是当前真实水平，门禁的作用是「不许再掉」。
+
+### 工程 · 若干小项（2026-09-30）
+
+- `daily-winners.yml` 补 `concurrency`（另两个每日作业原先都有；手动触发与定时触发
+  同时发生会并行写同一批 prizes/sales 行）
+- `docker/Dockerfile` 补 `HEALTHCHECK`（此前健康检查只在 compose.yaml，裸 `docker run` 拿不到）
+- 新增 `.github/dependabot.yml`（pip 合成一个 PR / npm / github-actions 三档）
+- 补 `v1.0.0` 的 GitHub release 条目（tag 与 CHANGELOG 文档都在，缺 release 入口）
+
+### 文档 · 清理空的「未发布」章节（2026-09-30）
+
+`## [未发布]` 此前是空标题（下一行直接是 1.1.0），本节填入上述内容。
+
 ## [1.1.1](https://github.com/LeilaoMi/LottoLab/releases/tag/v1.1.1) · 2026-09-24
 
 安全与缺口收口版本（承接多源采集/快乐8期望/复盘只读，补齐 C5 安全项与 B 组前端缺口）：
@@ -23,9 +102,6 @@
 - **样本外闸门**：冷门度流行度学习（含数字型）仅在 70/30 验证段与训练符号一致时通过，否则 fail-closed。
 - **安全加固**：`X-Forwarded-For` 仅受信代理链生效（`LOTTOLAB_TRUSTED_PROXIES`）；缺 `Content-Length` 的 POST 拒绝；worker 错误信息脱敏；采集脚本去掉 `curl -k`；空源/分歧作业非零退出；GitHub Actions 加 concurrency、钉 `psycopg[binary]`。
 - **回测稳定性对照**：测试窗前后半平均优势对照（CONSISTENT / INCONSISTENT / TOO_SHORT），纯描述性，不做检验、不参与 verdict；回测页新增对照列。
-- **回测报告脚本**：`python scripts/export_report.py 报告.json` 把 JSON 导出渲染为 Markdown 摘要（打到控制台，自存 `.local/`，不进仓库）。
-
-## [未发布]
 
 ## [1.1.0](https://github.com/LeilaoMi/LottoLab/releases/tag/v1.1.0) · 2026-09-18
 

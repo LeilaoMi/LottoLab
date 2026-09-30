@@ -1,0 +1,48 @@
+# 依赖更新。2026-09-30 补：此前无 dependabot，升级只能靠人工发现。
+#
+# 分两档：
+#   - runtime 直接依赖（后端 + 前端）：每周一次，跑完整 CI
+#   - github-actions：每月一次（action 自身的更新风险比业务依赖低）
+#
+# 注意 requirements.lock 与 frontend/pnpm-lock.yaml 是刻意 pin 住的，
+# 所以 python/pip 与 pnpm 只开 lockfile 兼容性更新，不做宽泛升级 ——
+# 宽泛升级会与 CONTRIBUTING 要求的「9 条验证命令全过」冲突，
+# 而那 9 条命令需要本地有 PostgreSQL 与 Node 24。
+version: 2
+
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # 把后端依赖合成一个 PR：单独升级一个库容易与其它库产生解析冲突，
+      # 逐个开 PR 反而要人工确认一堆相互依赖的解析结果。
+      backend-runtime:
+        patterns:
+          - "*"
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "build(deps)"
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "build(deps)"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: "ci(deps)"

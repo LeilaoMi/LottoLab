@@ -40,7 +40,13 @@ jobs:
       - run: ruff check backend tests collector scripts migrations app.py
       - run: ruff format --check backend tests collector scripts migrations app.py
       - run: mypy backend
-      - run: pytest -q --junitxml=.local/pytest-ci.xml
+      # 覆盖率门禁：2026-09-30 实测 baseline 是 74%（合并 backend+collector）。
+      # 分列看差异极大 —— backend 85%（analysis 98% / backtest 98% / coldness 92%），
+      # collector 仅 9%（contract / daily_sync / shadow_parallel / refresh_winners 均 0%），
+      # 合并后被统计层的高覆盖稀释掉了。所以只对合并值设门禁，不分列设 ——
+      # 分列设会逼着人把 collector 的 9% 抬到 85%，那不是靠补测试能做到的。
+      # 74% 是当前真实水平，门禁的作用是「不许再掉」，抬高要靠补采集层测试逐次提交。
+      - run: pytest -q --junitxml=.local/pytest-ci.xml --cov=backend --cov=collector --cov-report=term --cov-report=xml --cov-fail-under=74
       - run: python scripts/check_postgres.py
       - uses: actions/upload-artifact@v6
         if: always()
@@ -50,6 +56,7 @@ jobs:
           path: |
             .local/pytest-ci.xml
             .local/postgres-verification.json
+            .local/coverage.xml
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 20

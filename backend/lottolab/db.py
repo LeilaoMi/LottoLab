@@ -90,6 +90,10 @@ class IngestionRun(Base):
     rejected: Mapped[int] = mapped_column(Integer, default=0)
     conflicts: Mapped[int] = mapped_column(Integer, default=0)
     warnings: Mapped[int] = mapped_column(Integer, default=0)
+    # 本批号码是否真的经过 >=2 个源的逐期比对。生产 daily_sync 是单源 append，恒为 False；
+    # 只有走 collect_core.ingest 的多源路径才为 True。conflicts=0 无法区分「比对过且一致」
+    # 与「压根没比对」，这一列才是判据。迁移 x2srcval01。
+    sources_cross_checked: Mapped[bool] = mapped_column(Boolean, default=False)
 
     def public(self) -> dict:
         return {
@@ -106,6 +110,8 @@ class IngestionRun(Base):
             "rejected": self.rejected,
             "conflicts": self.conflicts,
             "warnings": self.warnings,
+            # 暴露给 API：读表的人要能分辨「这批没被任何第二源校验过」
+            "sources_cross_checked": self.sources_cross_checked,
         }
 
 

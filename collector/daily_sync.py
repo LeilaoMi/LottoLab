@@ -5,6 +5,14 @@
 每彩种保留一条 IngestionRun 溯源；期号经 normalize_issue 归一（dlt 5 位→7 位，qxc 保持 5 位）。
 号码范围/升序/可重等由数据库 family-aware CHECK 兜底，不合规记录计入 rejected 而非崩溃。
 
+**本作业是单源写入，不做多源交叉校验。**
+数据只来自 17500（source="17500"），从不 import collect_core.ingest。多源语义指纹比对
+（records_by_source → accepted/rejected）在 collector/shadow_parallel.py 里，而影子的
+DIVERGE → sys.exit(1) 只是告警、不拦生产写入。所以分歧的期号仍然能进 draws。
+
+因此这里显式写 sources_cross_checked=False：conflicts 恒为 0 时，单靠它无法区分
+「比对过且一致」与「压根没比对」。README 的「多源交叉校验」只在影子层成立。
+
 用法：
     DATABASE_URL=<neon-url> python collector/daily_sync.py            # 默认每彩种最新 40 期
     DATABASE_URL=... python collector/daily_sync.py --recent=200
@@ -53,6 +61,10 @@ def sync_kind(factory, kind: str, n: int) -> int:
             dataset_kind="real",
             source="17500",
             source_url=src_url,
+            # 显式声明：本作业单源写入，从未经第二源比对（见模块 docstring）。
+            # 不写这一行也不会跑错（列默认 False），但写出来是为了让读代码的人
+            # 不会误以为 conflicts=0 意味着「比对过」。
+            sources_cross_checked=False,
             snapshot_hash=snapshot_hash,
             snapshot_path=f"{snapshot_hash}.snapshot",
             received=len(recs),

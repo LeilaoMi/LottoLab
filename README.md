@@ -19,9 +19,21 @@
 
 **LottoLab 是一个中文彩票数据研究工作台。** 它的三条立场：
 
-- **真数据**：8 个彩种的开奖、销量与一等奖注数每日自动同步，多源交叉校验，不一致的期号拒绝入库；
+- **真数据**：8 个彩种的开奖、销量与一等奖注数每日自动同步；**号码多源比对在影子层运行，发现分歧即告警（不拦生产写入）**——生产 `draws` 目前是单源（17500）写入，每条 `ingestion_runs` 都带 `sources_cross_checked=false` 标明「未经第二源校验」，不把单源入库说成「交叉校验后入库」；
 - **诚实统计**：每个结论对照随机基线 + 显著性检验，被证伪的功能照样留档，而不是悄悄删掉；
 - **可复现**：实验冻结数据、记录种子与代码指纹，逐期结果可导出 JSON 复核。
+
+> **关于「多源交叉校验」的确切范围**（2026-09-30 修正）
+>
+> 更早的版本在这里写的是「多源交叉校验，不一致的期号拒绝入库」。这句话对影子表成立，对生产表**不成立**：
+> `collector/daily_sync.py` 是单源 append（硬编码 `source="17500"`，不 import `collect_core.ingest`），
+> 而带多源语义指纹比对与 `rejected[issue]` 的逻辑在 `collector/shadow_parallel.py` ——
+> 影子的 `DIVERGE → sys.exit(1)` 触发 GitHub Actions 告警，但**不阻止**行进入 `draws`。
+>
+> 所以分歧的期号目前仍能进生产表。这不是遗漏而是记录下来的现状；`sources_cross_checked`
+> 这一列就是为此加的：`conflicts=0` 无法区分「比对过且一致」与「压根没比对」。
+> 若要真正兑现「拒绝入库」，需让 `daily_sync` 拉第二源并过 `collect_core.ingest` ——
+> 注意 `ingest` 对单源也放行，所以还需要同时记录「源数 ≥2」才能证明批次经过校验。
 
 ## 界面预览
 
@@ -53,7 +65,7 @@
 
 ## 功能一览
 
-**数据整理**：8 彩种多源同步（17500/cwl/sporttery 交叉比对）、CSV 导入导出（单次 1 万行，本地 8 MiB / 云端 4 MiB）、原始快照（本地文件 / 云端压缩入库）、重复校验与冲突复核；开奖每日自动同步（北京时间 23:00），一等奖注数与销量每日刷新（23:40）。
+**数据整理**：8 彩种多源同步（生产写入走 17500；17500/cwl/sporttery 的**交叉比对在影子层**运行，分歧即告警）、CSV 导入导出（单次 1 万行，本地 8 MiB / 云端 4 MiB）、原始快照（本地文件 / 云端压缩入库）、重复校验与冲突复核；开奖每日自动同步（北京时间 23:00），一等奖注数与销量每日刷新（23:40）。
 
 **历史观察与检验**：池型看号码频率、遗漏、和值、跨度、奇偶、分区、连号、重号与共现；数字型看逐位频率与遗漏。池型用无放回零模型 + Monte Carlo + 序列相关 + 多重比较校正；数字型用逐位均匀性卡方。
 
@@ -84,7 +96,7 @@
 ```mermaid
 flowchart LR
   subgraph Client["浏览器"]
-    UI["React 单页 · 9 页面<br/>PWA / 深色 / 移动端"]
+    UI["React 单页 · 9 页面<br/>深色 / 移动端<br/>（无 PWA：未接 manifest / Service Worker）"]
   end
   subgraph Edge["入口"]
     CF["Cloudflare<br/>DNS + POST 限流"]
@@ -135,8 +147,16 @@ docker compose up -d --build --wait
 | 环境 | 查询与推荐/验奖 | 同步、导入与计算 |
 | :--- | :--- | :--- |
 | 本地 / Docker | 可直接使用 | 仅本机访问，或凭 `LOTTOLAB_ADMIN_TOKEN` |
-| Vercel 未设令牌 | 公开可访问 | 公开可访问（无需登录） |
+| Vercel 未设令牌 | 公开可访问 | 公开可访问（无需登录）⚠️ |
 | Vercel 已设令牌（≥32 位） | 公开可访问 | 需管理员令牌 |
+
+> ⚠️ **部署到 Vercel 前先设 `LOTTOLAB_ADMIN_TOKEN`。**
+> `backend/lottolab/cloud.py` 的逻辑是「令牌 ≥32 位 → 鉴权；未设或不足 → `public_mode=True`」，
+> 也就是**不设令牌等于对互联网开放 12 个写端点**（`/imports/csv`、`/sources/sync`、`/backtests`、
+> `/quality/{id}/resolve` 等，含 CSV 导入与触发重算）。本地 / Docker 路径不受影响：
+> `public_mode` 默认 `False` 且 `allow_local_writes` 默认 `False`，未授权写入一律 403。
+> 限流按进程计数（`ratelimit.py` 自述「treat this as a backstop, not a quota」），
+> 在 Vercel 多实例下防护弱于看起来的强度，因此不要依赖限流兜底。
 
 当前系统没有注册、独立用户账户或角色管理。源码中没有预置任何公共账号或线上地址；自行部署即可获得独立的数据与实验空间。
 
@@ -154,7 +174,7 @@ docker compose up -d --build --wait
 
 ## 质量门禁
 
-每次推送与 PR 自动运行三条流水：后端（PostgreSQL 17 真库回归）、浏览器（Playwright 本地与云端两种模式）、容器（构建→灌数据→重建→校验数据与快照保留）。后端门禁为 `pip check`、Ruff 检查与格式、`mypy`、201 项 pytest（需 PostgreSQL 的 2 项在 CI 真库跑）；前端门禁为 Prettier 与构建。文档改动需核对命令、链接与真实渲染。
+每次推送与 PR 自动运行三条流水：后端（PostgreSQL 17 真库回归）、浏览器（Playwright 本地与云端两种模式）、容器（构建→灌数据→重建→校验数据与快照保留）。后端门禁为 `pip check`、Ruff 检查与格式、`mypy`、263 项 pytest（需 PostgreSQL 的 2 项在 CI 真库跑）；前端门禁为 Prettier 与构建。文档改动需核对命令、链接与真实渲染 —— `tests/test_readme_claims.py` 会把 README 的关键数字与承诺对到真实 pytest 收集数与具体代码路径上，改了 README 忘了改代码（或反过来）会直接红。
 
 ## 文档导航
 

@@ -8,6 +8,13 @@ on:
   workflow_dispatch: {}
 permissions:
   contents: read
+# 2026-09-30 补：另两个每日作业（daily-sync / shadow-parallel）都有并发组，这里原先没有。
+# 实际重叠概率低（cron 与 daily-sync 错开 40 分钟），但手动触发 + 定时触发同时发生时
+# 会并行写同一批 prizes/sales 行。cancel-in-progress: false = 排队而不是互相杀掉，
+# 与另两个保持一致。
+concurrency:
+  group: daily-winners
+  cancel-in-progress: false
 jobs:
   refresh:
     runs-on: ubuntu-latest
