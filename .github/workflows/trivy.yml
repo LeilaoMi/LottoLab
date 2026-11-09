@@ -17,9 +17,15 @@ jobs:
   trivy-fs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # persist-credentials is off: these jobs only read code
+          # and never push, so the token must not linger in
+          # .git/config (same rationale as gitleaks.yml/semgrep.yml;
+          # also flagged by zizmor in the same review).
+          persist-credentials: false
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -33,16 +39,22 @@ jobs:
           cache-dir: ${{ github.workspace }}/.cache/trivy-fs
       - name: Upload Trivy fs results to code scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           sarif_file: trivy-fs.sarif
           category: trivy-fs
   trivy-config:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # persist-credentials is off: these jobs only read code
+          # and never push, so the token must not linger in
+          # .git/config (same rationale as gitleaks.yml/semgrep.yml;
+          # also flagged by zizmor in the same review).
+          persist-credentials: false
       - name: Trivy config scan
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: config
           severity: CRITICAL,HIGH
@@ -55,7 +67,7 @@ jobs:
           cache-dir: ${{ github.workspace }}/.cache/trivy-config
       - name: Upload Trivy config results to code scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           sarif_file: trivy-config.sarif
           category: trivy-config
