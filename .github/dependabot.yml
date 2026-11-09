@@ -14,7 +14,7 @@ updates:
   commit-message:
     prefix: build(deps)
   cooldown:
-    default-days: 3
+    default-days: 7
 - package-ecosystem: npm
   directory: /frontend
   schedule:
@@ -25,7 +25,7 @@ updates:
   commit-message:
     prefix: build(deps)
   cooldown:
-    default-days: 3
+    default-days: 7
 - package-ecosystem: github-actions
   directory: /
   schedule:
@@ -36,4 +36,4 @@ updates:
   commit-message:
     prefix: ci(deps)
   cooldown:
-    default-days: 3
+    default-days: 7
