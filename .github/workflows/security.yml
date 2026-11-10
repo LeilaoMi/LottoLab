@@ -41,3 +41,4 @@ jobs:
     uses: LeilaoMi/security-workflows/.github/workflows/lint.yml@6e73d69a8a3aa4ff715388f5f8c53add8f1c57b8 # v4
     with:
       biome: true
+      basedpyright: true
